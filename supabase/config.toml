@@ -1,0 +1,3 @@
+[functions.classify-incident]
+verify_jwt = true
+entrypoint = "./functions/classify-incident/index.ts"
