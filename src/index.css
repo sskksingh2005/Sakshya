@@ -5,6 +5,29 @@
 @tailwind utilities;
 
 :root {
+  /* Light Theme (RGB channel variables for Tailwind alpha support) */
+  --color-primary: 61 31 92;
+  --color-primary-light: 90 53 128;
+  --color-primary-dark: 42 21 64;
+
+  --color-secondary: 107 47 160;
+  --color-secondary-light: 139 79 192;
+
+  --color-accent: 214 32 143;
+  --color-accent-light: 232 87 158;
+
+  --color-blush: 251 228 236;
+  --color-blush-light: 253 240 245;
+
+  --color-warmwhite: 255 249 251;
+  --color-ink: 42 27 61;
+  --color-muted: 138 123 146;
+  --color-border: 243 210 223;
+
+  --color-danger: 224 86 61;
+  --color-success: 63 163 126;
+
+  /* Legacy color variables maintained for backward compatibility */
   --sakshya-purple: #3D1F5C;
   --sakshya-violet: #6B2FA0;
   --sakshya-magenta: #D6208F;
@@ -15,18 +38,42 @@
   --sakshya-muted: #8A7B92;
   --sakshya-danger: #E0563D;
   --sakshya-success: #3FA37E;
+}
 
-  /* Legacy color variables maintained for backward compatibility */
-  --color-primary: var(--sakshya-purple);
-  --color-secondary: var(--sakshya-violet);
-  --color-accent: var(--sakshya-magenta);
-  --color-hover: var(--sakshya-rose);
-  --color-bg: var(--sakshya-blush);
-  --color-card: var(--sakshya-warm-white);
-  --color-body: var(--sakshya-text);
-  --color-muted: var(--sakshya-muted);
-  --color-danger: var(--sakshya-danger);
-  --color-success: var(--sakshya-success);
+.dark {
+  /* Sakshya Dark Theme (Rich Charcoal & Warm Purple Accents) */
+  --color-primary: 155 107 199;
+  --color-primary-light: 180 138 224;
+  --color-primary-dark: 27 21 33;
+
+  --color-secondary: 155 107 199;
+  --color-secondary-light: 180 138 224;
+
+  --color-accent: 232 91 174;
+  --color-accent-light: 240 139 185;
+
+  --color-blush: 18 14 22;       /* #120E16 Near-black charcoal background */
+  --color-blush-light: 27 21 33; /* #1B1521 Surface cards */
+
+  --color-warmwhite: 27 21 33;   /* #1B1521 Card background */
+  --color-ink: 248 243 250;     /* #F8F3FA Off-white primary text */
+  --color-muted: 200 189 206;   /* #C8BDCE Muted secondary text */
+  --color-border: 58 43 70;     /* #3A2B46 Subtle dark border */
+
+  --color-danger: 240 120 99;   /* #F07863 Alert color */
+  --color-success: 91 196 154;  /* #5BC49A Success color */
+
+  /* Legacy color variables updated for dark mode */
+  --sakshya-purple: #F8F3FA;
+  --sakshya-violet: #9B6BC7;
+  --sakshya-magenta: #E85BAE;
+  --sakshya-rose: #F08BB9;
+  --sakshya-blush: #120E16;
+  --sakshya-warm-white: #1B1521;
+  --sakshya-text: #F8F3FA;
+  --sakshya-muted: #C8BDCE;
+  --sakshya-danger: #F07863;
+  --sakshya-success: #5BC49A;
 }
 
 * {
@@ -36,11 +83,12 @@
 body {
   margin: 0;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  background-color: var(--sakshya-blush);
-  color: var(--sakshya-text);
+  background-color: rgb(var(--color-blush));
+  color: rgb(var(--color-ink));
   font-size: 16px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -48,6 +96,7 @@ h1, h2, h3, h4, h5, h6 {
   font-weight: 600;
   line-height: 1.25;
   color: var(--sakshya-purple);
+  transition: color 0.2s ease;
 }
 
 /* Custom scrollbar */
@@ -56,16 +105,16 @@ h1, h2, h3, h4, h5, h6 {
   height: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--sakshya-blush);
+  background: rgb(var(--color-blush));
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--sakshya-violet);
+  background: rgb(var(--color-secondary));
   border-radius: 4px;
 }
 
 /* Focus ring for accessibility */
 *:focus-visible {
-  outline: 2px solid var(--sakshya-magenta);
+  outline: 2px solid rgb(var(--color-accent));
   outline-offset: 2px;
 }
 

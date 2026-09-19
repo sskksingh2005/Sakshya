@@ -210,7 +210,7 @@ export function AddIncident() {
                     onChange={(e) => setDate(e.target.value)}
                     required
                     max={new Date().toISOString().split('T')[0]}
-                    className="w-full rounded-xl border border-blush bg-blush/20 px-3.5 py-2.5 text-sm text-ink focus:border-accent focus:bg-white focus:outline-none transition-all"
+                    className="w-full rounded-xl border border-blush bg-blush/20 px-3.5 py-2.5 text-sm text-ink focus:border-accent focus:bg-warmwhite dark:focus:bg-primary-dark/30 focus:outline-none transition-all"
                   />
                 </div>
 
@@ -223,7 +223,7 @@ export function AddIncident() {
                     onChange={(e) => setDescription(e.target.value)}
                     required
                     rows={5}
-                    className="w-full rounded-xl border border-blush bg-blush/20 px-3.5 py-2.5 text-sm text-ink focus:border-accent focus:bg-white focus:outline-none resize-y leading-relaxed transition-all"
+                    className="w-full rounded-xl border border-blush bg-blush/20 px-3.5 py-2.5 text-sm text-ink focus:border-accent focus:bg-warmwhite dark:focus:bg-primary-dark/30 focus:outline-none resize-y leading-relaxed transition-all"
                     placeholder="Describe the incident as clearly as you recall. This narrative will be preserved exactly as written."
                   />
                 </div>
@@ -233,7 +233,7 @@ export function AddIncident() {
                   <select
                     value={category}
                     onChange={(e) => setCategory(e.target.value)}
-                    className="w-full rounded-xl border border-blush bg-blush/20 px-3.5 py-2.5 text-sm text-ink focus:border-accent focus:bg-white focus:outline-none transition-all"
+                    className="w-full rounded-xl border border-blush bg-blush/20 px-3.5 py-2.5 text-sm text-ink focus:border-accent focus:bg-warmwhite dark:focus:bg-primary-dark/30 focus:outline-none transition-all"
                   >
                     {CATEGORIES.map((c) => (
                       <option key={c.value} value={c.value}>{c.label}</option>
@@ -347,9 +347,9 @@ export function AddIncident() {
                 </div>
 
                 {classifyError && (
-                  <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
+                  <div className="rounded-xl bg-danger/8 border border-danger/20 p-3 text-xs text-danger dark:bg-danger/10">
                     <p className="font-semibold mb-0.5">Automatic classification unavailable</p>
-                    <p>{classifyError}. Standard category fallbacks applied. You can select the correct category below.</p>
+                    <p className="text-ink">{classifyError}. Standard category fallbacks applied. You can select the correct category below.</p>
                   </div>
                 )}
 

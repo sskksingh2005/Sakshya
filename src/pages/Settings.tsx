@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { AppNav } from '@/components/AppNav';
 import { DemoModeBadge } from '@/components/DemoModeBadge';
 import { Button } from '@/components/ui/Button';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 export function Settings() {
   const navigate = useNavigate();
@@ -56,6 +57,13 @@ export function Settings() {
           <div>
             <h1 className="font-heading text-2xl md:text-3xl font-bold text-primary mb-1">Account & Vault Settings</h1>
             <p className="text-xs md:text-sm text-muted">Account management, safety alert simulations, and data controls.</p>
+          </div>
+
+          {/* Appearance Card */}
+          <div className="rounded-2xl bg-warmwhite border border-blush p-6 shadow-sm space-y-3 animate-fade-in">
+            <h2 className="font-heading text-base font-semibold text-primary">Appearance</h2>
+            <p className="text-xs text-muted">Choose how Sakshya looks on your device. Your preference is saved locally.</p>
+            <ThemeToggle variant="full" />
           </div>
 
           {/* Account Card */}

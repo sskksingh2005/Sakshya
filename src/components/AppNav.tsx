@@ -2,6 +2,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Home, Plus, FileText, Phone, Shield, Settings, LogOut, ExternalLink } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { SakshyaLogo } from '@/components/branding/SakshyaLogo';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 export function AppNav() {
   const location = useLocation();
@@ -16,6 +17,12 @@ export function AppNav() {
     { to: '/safety', label: 'Safety', icon: Shield },
     { to: '/settings', label: 'Settings', icon: Settings },
   ];
+  const normalizedPathname = location.pathname.replace(/\/+$/, '') || '/';
+  const isNavItemActive = (to: string) =>
+    normalizedPathname === to ||
+    (to === '/dashboard' &&
+      (normalizedPathname.startsWith('/dashboard/') ||
+        (normalizedPathname.startsWith('/incidents/') && normalizedPathname !== '/incidents/new')));
 
   const handleQuickExit = async () => {
     // Immediate redirect to decoy calculator for survivor safety
@@ -31,24 +38,27 @@ export function AppNav() {
     <>
       {/* Mobile top bar */}
       <header className="md:hidden sticky top-0 z-30 bg-primary/95 backdrop-blur-md text-white px-4 py-3 shadow-md flex items-center justify-between border-b border-white/10">
-        <Link to="/dashboard" className="flex items-center gap-2">
+        <Link to="/dashboard" className="flex items-center gap-2 rounded-md bg-white px-2 py-1 dark:bg-transparent">
           <SakshyaLogo size="sm" showWordmark={true} className="[&_span]:text-white [&_span.text-muted]:text-white/70" />
         </Link>
 
-        <button
-          onClick={handleQuickExit}
-          className="px-3 py-1.5 rounded-lg bg-accent text-white text-xs font-semibold hover:bg-accent-light transition-colors flex items-center gap-1 shadow-sm active:scale-95"
-          title="Quick exit to calculator"
-        >
-          <span>Quick Exit</span>
-          <ExternalLink size={12} />
-        </button>
+        <div className="flex items-center gap-1.5">
+          <ThemeToggle className="!text-white/80" />
+          <button
+            onClick={handleQuickExit}
+            className="px-3 py-1.5 rounded-lg bg-accent text-white text-xs font-semibold hover:bg-accent-light transition-colors flex items-center gap-1 shadow-sm active:scale-95"
+            title="Quick exit to calculator"
+          >
+            <span>Quick Exit</span>
+            <ExternalLink size={12} />
+          </button>
+        </div>
       </header>
 
       {/* Desktop sidebar */}
       <aside className="hidden md:flex fixed left-0 top-0 h-full w-60 flex-col bg-primary text-white shadow-xl z-30 border-r border-white/10">
         <div className="p-5 border-b border-white/10">
-          <Link to="/dashboard" className="block">
+          <Link to="/dashboard" className="block w-fit rounded-md bg-white px-2 py-1 dark:bg-transparent">
             <SakshyaLogo size="md" showWordmark={true} className="[&_span]:text-white [&_span.text-muted]:text-white/70" />
           </Link>
         </div>
@@ -56,9 +66,7 @@ export function AppNav() {
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const active =
-              location.pathname === item.to ||
-              (item.to === '/dashboard' && location.pathname.startsWith('/incidents/'));
+            const active = isNavItemActive(item.to);
 
             return (
               <Link
@@ -85,6 +93,11 @@ export function AppNav() {
             <span>Quick Exit (Calculator)</span>
             <ExternalLink size={14} />
           </button>
+
+          <div className="flex items-center justify-between px-1">
+            <span className="text-xs text-white/60 font-medium">Appearance</span>
+            <ThemeToggle />
+          </div>
           
           <button
             onClick={handleSignOut}
@@ -101,9 +114,7 @@ export function AppNav() {
         <div className="flex items-center justify-around px-1 py-1.5">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const active =
-              location.pathname === item.to ||
-              (item.to === '/dashboard' && location.pathname.startsWith('/incidents/'));
+            const active = isNavItemActive(item.to);
 
             return (
               <Link

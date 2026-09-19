@@ -309,10 +309,10 @@ export function Dossier() {
               </div>
 
               {/* Legal admissibility disclaimer */}
-              <div className="rounded-2xl bg-warmwhite border border-amber-200 p-5 shadow-sm flex items-start gap-3">
-                <AlertCircle size={20} className="text-amber-600 shrink-0 mt-0.5" />
+              <div className="rounded-2xl bg-warmwhite border border-border p-5 shadow-sm flex items-start gap-3">
+                <AlertCircle size={20} className="text-muted shrink-0 mt-0.5" />
                 <div className="text-xs text-ink leading-relaxed">
-                  <strong className="text-amber-700 block mb-0.5">Structured Evidence Disclaimer</strong>
+                  <strong className="text-ink block mb-0.5">Structured Evidence Disclaimer</strong>
                   This dossier is a structured evidence preparation document. It is not automatically admissible in court. Part B of the Section 63(4) certificate must be completed and signed by a qualified computer forensics expert. Please consult a qualified legal professional before submitting.
                 </div>
               </div>

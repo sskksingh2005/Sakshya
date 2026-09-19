@@ -70,13 +70,13 @@ export function AuthPage() {
         </div>
 
         <div className="rounded-2xl bg-warmwhite border border-blush shadow-lg p-6 md:p-8">
-          <div className="flex gap-2 mb-6 bg-blush/40 p-1 rounded-xl">
+          <div className="flex gap-2 mb-6 bg-blush/40 dark:bg-primary-dark/60 p-1 rounded-xl">
             <button
               type="button"
               disabled={loading}
               onClick={() => handleTabSwitch('signin')}
               className={`flex-1 rounded-lg py-2 text-xs font-semibold transition-all ${
-                mode === 'signin' ? 'bg-primary text-white shadow-sm' : 'text-muted hover:text-primary'
+                mode === 'signin' ? 'bg-primary text-white shadow-sm' : 'text-muted hover:text-primary dark:hover:text-accent'
               }`}
             >
               Sign In
@@ -86,7 +86,7 @@ export function AuthPage() {
               disabled={loading}
               onClick={() => handleTabSwitch('signup')}
               className={`flex-1 rounded-lg py-2 text-xs font-semibold transition-all ${
-                mode === 'signup' ? 'bg-primary text-white shadow-sm' : 'text-muted hover:text-primary'
+                mode === 'signup' ? 'bg-primary text-white shadow-sm' : 'text-muted hover:text-primary dark:hover:text-accent'
               }`}
             >
               Sign Up
@@ -104,7 +104,7 @@ export function AuthPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   disabled={loading}
-                  className="w-full rounded-xl border border-blush bg-blush/20 pl-10 pr-4 py-3 text-sm text-ink focus:border-accent focus:bg-white focus:outline-none transition-all disabled:opacity-60"
+                  className="w-full rounded-xl border border-blush bg-blush/20 pl-10 pr-4 py-3 text-sm text-ink focus:border-accent focus:bg-warmwhite dark:focus:bg-primary-dark/30 focus:outline-none transition-all disabled:opacity-60"
                   placeholder="your@email.com"
                 />
               </div>
@@ -121,7 +121,7 @@ export function AuthPage() {
                   required
                   disabled={loading}
                   minLength={6}
-                  className="w-full rounded-xl border border-blush bg-blush/20 pl-10 pr-4 py-3 text-sm text-ink focus:border-accent focus:bg-white focus:outline-none transition-all disabled:opacity-60"
+                  className="w-full rounded-xl border border-blush bg-blush/20 pl-10 pr-4 py-3 text-sm text-ink focus:border-accent focus:bg-warmwhite dark:focus:bg-primary-dark/30 focus:outline-none transition-all disabled:opacity-60"
                   placeholder="At least 6 characters"
                 />
               </div>
