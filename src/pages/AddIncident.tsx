@@ -1,12 +1,12 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Upload, Hash, Loader2, Check, AlertCircle, FileText } from 'lucide-react';
+import { ArrowLeft, Upload, Hash, Loader2, Check, AlertCircle, FileText, Info } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import { uploadEvidence, classifyIncident, computeSHA256, detectEscalation } from '@/lib/utils';
-import type { ClassifyResult } from '@/types';
+import type { ClassifyResult, Incident } from '@/types';
 import { AppNav } from '@/components/AppNav';
-import { getCategoryLabel } from '@/lib/utils';
+import { Button } from '@/components/ui/Button';
 
 const CATEGORIES = [
   { value: '', label: 'Let AI suggest a category' },
@@ -48,7 +48,7 @@ export function AddIncident() {
     const newFiles: UploadedFile[] = [];
     for (const file of Array.from(selected)) {
       if (file.size > 10 * 1024 * 1024) {
-        setError(`"${file.name}" is larger than 10MB. Please choose a smaller file.`);
+        setError(`"${file.name}" exceeds 10MB. Please choose a smaller file.`);
         continue;
       }
       const hash = await computeSHA256(file);
@@ -81,7 +81,7 @@ export function AddIncident() {
       return;
     }
     if (!navigator.onLine) {
-      setError("You're offline right now — this needs an internet connection. Your existing evidence is still visible on the dashboard.");
+      setError("You're offline right now — saving new incidents requires an internet connection.");
       return;
     }
 
@@ -94,8 +94,7 @@ export function AddIncident() {
     setClassifying(false);
 
     if (classifyErr || !result) {
-      setClassifyError(classifyErr || 'Classification failed');
-      // Still proceed with manual category
+      setClassifyError(classifyErr || 'AI classification was unavailable');
       setClassifyResult(null);
     } else {
       setClassifyResult(result);
@@ -111,7 +110,6 @@ export function AddIncident() {
     setError(null);
 
     try {
-      // Insert incident
       const finalCategory = category || classifyResult?.category || 'verbal_abuse';
       const finalSeverity = classifyResult?.severity_score || 1;
       const finalSummary = classifyResult?.summary || description.substring(0, 200);
@@ -134,7 +132,7 @@ export function AddIncident() {
         .single();
 
       if (incError) throw new Error(incError.message);
-      if (!incData) throw new Error('Failed to create incident');
+      if (!incData) throw new Error('Failed to create incident record');
 
       // Upload evidence files
       for (const f of files) {
@@ -156,7 +154,7 @@ export function AddIncident() {
         .order('incident_date', { ascending: false });
 
       if (allIncidents && allIncidents.length >= 2) {
-        const escalation = detectEscalation(allIncidents as any);
+        const escalation = detectEscalation(allIncidents as Incident[]);
         if (escalation.isEscalating) {
           await supabase
             .from('incidents')
@@ -173,87 +171,90 @@ export function AddIncident() {
   };
 
   return (
-    <div className="min-h-screen bg-blush">
+    <div className="min-h-screen bg-blush/60">
       <AppNav />
-      <main className="md:ml-60 pb-20 md:pb-0">
+      <main className="md:ml-60 pb-24 md:pb-8">
         <div className="max-w-2xl mx-auto p-4 md:p-8">
           <button
             onClick={() => navigate('/dashboard')}
-            className="flex items-center gap-1.5 text-sm text-muted hover:text-primary transition-colors mb-4"
+            className="flex items-center gap-1.5 text-xs font-semibold text-muted hover:text-primary transition-colors mb-4"
           >
             <ArrowLeft size={16} />
             Back to Dashboard
           </button>
 
           <h1 className="font-heading text-2xl font-bold text-primary mb-1">
-            {step === 'form' ? 'Add New Incident' : 'Review & Confirm'}
+            {step === 'form' ? 'Add Incident Record' : 'Review & Confirm Structuring'}
           </h1>
-          <p className="text-sm text-muted mb-6">
+          <p className="text-xs text-muted mb-6">
             {step === 'form'
-              ? 'Document what happened. You can include photos, audio, or documents as evidence.'
-              : 'Please review the AI classification below. You can adjust the category before saving.'}
+              ? 'Document what happened safely. Attach photos, audio, or documents as cryptographic evidence.'
+              : 'Review the AI-assisted incident structuring before committing to your encrypted vault.'}
           </p>
 
           {error && (
-            <div className="mb-4 rounded-lg bg-danger/10 border border-danger/20 p-3 text-sm text-danger flex items-start gap-2">
+            <div className="mb-4 rounded-xl bg-danger/10 border border-danger/20 p-3 text-xs text-danger flex items-start gap-2">
               <AlertCircle size={16} className="shrink-0 mt-0.5" />
-              {error}
+              <span>{error}</span>
             </div>
           )}
 
           {step === 'form' ? (
             <form onSubmit={handleSubmit} className="space-y-5">
-              <div>
-                <label className="block text-sm font-medium text-ink mb-1.5">Date of Incident</label>
-                <input
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  required
-                  max={new Date().toISOString().split('T')[0]}
-                  className="w-full rounded-lg border border-blush bg-warmwhite px-3 py-2.5 text-sm text-ink focus:border-accent focus:outline-none"
-                />
+              <div className="rounded-2xl bg-warmwhite border border-blush p-5 shadow-sm space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-ink mb-1.5">Date of Incident</label>
+                  <input
+                    type="date"
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    required
+                    max={new Date().toISOString().split('T')[0]}
+                    className="w-full rounded-xl border border-blush bg-blush/20 px-3.5 py-2.5 text-sm text-ink focus:border-accent focus:bg-white focus:outline-none transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-ink mb-1.5">
+                    What happened? <span className="text-muted font-normal">(in your own words)</span>
+                  </label>
+                  <textarea
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    required
+                    rows={5}
+                    className="w-full rounded-xl border border-blush bg-blush/20 px-3.5 py-2.5 text-sm text-ink focus:border-accent focus:bg-white focus:outline-none resize-y leading-relaxed transition-all"
+                    placeholder="Describe the incident as clearly as you recall. This narrative will be preserved exactly as written."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-ink mb-1.5">Category</label>
+                  <select
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    className="w-full rounded-xl border border-blush bg-blush/20 px-3.5 py-2.5 text-sm text-ink focus:border-accent focus:bg-white focus:outline-none transition-all"
+                  >
+                    {CATEGORIES.map((c) => (
+                      <option key={c.value} value={c.value}>{c.label}</option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-muted mt-1">
+                    AI-assisted classification will analyze and suggest details based on your account.
+                  </p>
+                </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-ink mb-1.5">
-                  What happened? <span className="text-muted font-normal">(in your own words)</span>
-                </label>
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  required
-                  rows={5}
-                  className="w-full rounded-lg border border-blush bg-warmwhite px-3 py-2.5 text-sm text-ink focus:border-accent focus:outline-none resize-y"
-                  placeholder="Describe the incident as it happened. This text will be preserved exactly as you write it."
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-ink mb-1.5">Category</label>
-                <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  className="w-full rounded-lg border border-blush bg-warmwhite px-3 py-2.5 text-sm text-ink focus:border-accent focus:outline-none"
-                >
-                  {CATEGORIES.map((c) => (
-                    <option key={c.value} value={c.value}>{c.label}</option>
-                  ))}
-                </select>
-                <p className="text-xs text-muted mt-1">
-                  You can leave this to AI, or pre-select if you prefer.
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-ink mb-1.5">Evidence Files</label>
+              {/* Evidence File Dropzone */}
+              <div className="rounded-2xl bg-warmwhite border border-blush p-5 shadow-sm space-y-3">
+                <label className="block text-xs font-semibold text-ink">Attach Evidence Files</label>
                 <div
                   onClick={() => fileInputRef.current?.click()}
-                  className="cursor-pointer rounded-lg border-2 border-dashed border-secondary/30 bg-warmwhite p-6 text-center hover:border-accent transition-colors"
+                  className="cursor-pointer rounded-xl border-2 border-dashed border-secondary/30 bg-blush/20 p-6 text-center hover:border-accent hover:bg-blush/40 transition-all"
                 >
-                  <Upload size={24} className="text-muted mx-auto mb-2" />
-                  <p className="text-sm text-ink font-medium">Tap to upload evidence</p>
-                  <p className="text-xs text-muted mt-1">Photos, audio, or documents (max 10MB each)</p>
+                  <Upload size={28} className="text-secondary mx-auto mb-2" />
+                  <p className="text-sm text-ink font-semibold">Tap to attach evidence</p>
+                  <p className="text-xs text-muted mt-1">Photos, audio, or PDF documents (max 10MB each)</p>
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -265,39 +266,39 @@ export function AddIncident() {
                 </div>
 
                 {hashing && (
-                  <div className="mt-3 flex items-center gap-2 text-sm text-secondary">
-                    <Loader2 size={16} className="animate-spin" />
-                    Computing SHA-256 hash...
+                  <div className="flex items-center gap-2 text-xs text-secondary font-medium">
+                    <Loader2 size={14} className="animate-spin" />
+                    Computing cryptographic SHA-256 evidence hashes...
                   </div>
                 )}
 
                 {files.length > 0 && (
-                  <div className="mt-3 space-y-2">
+                  <div className="space-y-2 pt-2">
                     {files.map((f, i) => (
-                      <div key={i} className="rounded-lg bg-warmwhite border border-blush p-3">
+                      <div key={i} className="rounded-xl bg-blush/30 border border-blush p-3">
                         <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-start gap-2 flex-1 min-w-0">
-                            <FileText size={16} className="text-secondary shrink-0 mt-0.5" />
+                          <div className="flex items-start gap-2.5 flex-1 min-w-0">
+                            <FileText size={18} className="text-accent shrink-0 mt-0.5" />
                             <div className="min-w-0">
-                              <p className="text-sm font-medium text-ink truncate">{f.file.name}</p>
-                              <p className="text-xs text-muted flex items-center gap-1">
-                                <Hash size={10} />
-                                <span className="font-mono text-[10px]">{f.hash.substring(0, 24)}...</span>
+                              <p className="text-xs font-semibold text-ink truncate">{f.file.name}</p>
+                              <p className="text-[11px] text-muted flex items-center gap-1 mt-0.5 font-mono">
+                                <Hash size={11} className="text-secondary shrink-0" />
+                                <span className="truncate">{f.hash}</span>
                               </p>
                             </div>
                           </div>
                           <button
                             type="button"
                             onClick={() => removeFile(i)}
-                            className="text-xs text-danger hover:underline shrink-0"
+                            className="text-xs text-danger font-semibold hover:underline shrink-0"
                           >
                             Remove
                           </button>
                         </div>
                         {f.file.type.startsWith('audio/') && (
-                          <div className="mt-2">
-                            <label className="text-xs text-muted block mb-1">
-                              Was this recording made with the other person's knowledge?
+                          <div className="mt-2.5 pt-2 border-t border-blush/50">
+                            <label className="text-[11px] text-muted block mb-1">
+                              Was this recording made with party consent?
                             </label>
                             <div className="flex gap-2">
                               {['obtained', 'not_obtained', 'unsure'].map((opt) => (
@@ -305,13 +306,13 @@ export function AddIncident() {
                                   key={opt}
                                   type="button"
                                   onClick={() => updateConsent(i, opt)}
-                                  className={`text-xs rounded-full px-2.5 py-1 transition-colors ${
+                                  className={`text-[11px] font-medium rounded-lg px-2.5 py-1 transition-all ${
                                     f.consentStatus === opt
-                                      ? 'bg-primary text-white'
+                                      ? 'bg-primary text-white shadow-sm'
                                       : 'bg-blush text-muted hover:text-primary'
                                   }`}
                                 >
-                                  {opt === 'obtained' ? 'Yes' : opt === 'not_obtained' ? 'No' : 'Unsure'}
+                                  {opt === 'obtained' ? 'Yes (Obtained)' : opt === 'not_obtained' ? 'No' : 'Unsure'}
                                 </button>
                               ))}
                             </div>
@@ -323,55 +324,49 @@ export function AddIncident() {
                 )}
               </div>
 
-              <button
+              <Button
                 type="submit"
-                disabled={classifying}
-                className="w-full rounded-lg bg-accent text-white py-3 text-sm font-semibold hover:bg-accent-light transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                variant="primary"
+                size="lg"
+                fullWidth
+                loading={classifying}
               >
-                {classifying ? (
-                  <>
-                    <Loader2 size={16} className="animate-spin" />
-                    AI is classifying...
-                  </>
-                ) : (
-                  'Continue to Review'
-                )}
-              </button>
+                {classifying ? 'Structuring Incident Details...' : 'Continue to Review & Confirm'}
+              </Button>
             </form>
           ) : (
-            <div className="space-y-5">
-              {/* Review classification */}
-              <div className="rounded-xl bg-warmwhite border border-blush p-4">
-                <h3 className="font-heading text-sm font-semibold text-primary mb-3">AI Classification Result</h3>
+            <div className="space-y-5 animate-fade-in">
+              {/* AI Structuring Review Card */}
+              <div className="rounded-2xl bg-warmwhite border border-blush p-5 shadow-sm space-y-4">
+                <div className="flex items-center justify-between border-b border-blush pb-3">
+                  <h3 className="font-heading text-sm font-semibold text-primary">AI Incident Structuring</h3>
+                  <span className="text-[11px] text-muted flex items-center gap-1">
+                    <Info size={13} className="text-secondary" />
+                    Review before saving
+                  </span>
+                </div>
 
                 {classifyError && (
-                  <div className="mb-3 rounded-lg bg-danger/8 border border-danger/20 p-3 text-sm text-danger">
-                    <p className="font-medium mb-1">Automatic classification was unavailable</p>
-                    <p className="text-xs">{classifyError}. A basic fallback was used. You can manually select the correct category below.</p>
+                  <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
+                    <p className="font-semibold mb-0.5">Automatic classification unavailable</p>
+                    <p>{classifyError}. Standard category fallbacks applied. You can select the correct category below.</p>
                   </div>
                 )}
 
                 {classifyResult && !classifyResult.fallback_used && (
-                  <div className="mb-3 flex items-center gap-2 text-xs text-success">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-success bg-success/10 px-3 py-1.5 rounded-lg">
                     <Check size={14} />
-                    Classified by AI (OpenAI)
+                    Structured by Sakshya AI Assistant
                   </div>
                 )}
 
-                {classifyResult && classifyResult.fallback_used && (
-                  <div className="mb-3 flex items-center gap-2 text-xs text-muted">
-                    <AlertCircle size={14} />
-                    Fallback classifier used (AI was unavailable)
-                  </div>
-                )}
-
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <div>
-                    <label className="text-xs text-muted">Category — you can change this</label>
+                    <label className="text-xs font-semibold text-ink">Category</label>
                     <select
                       value={category || classifyResult?.category || ''}
                       onChange={(e) => setCategory(e.target.value)}
-                      className="w-full mt-1 rounded-lg border border-blush bg-blush/30 px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none"
+                      className="w-full mt-1 rounded-xl border border-blush bg-blush/20 px-3 py-2 text-xs text-ink font-medium focus:border-accent focus:outline-none"
                     >
                       {CATEGORIES.filter((c) => c.value).map((c) => (
                         <option key={c.value} value={c.value}>{c.label}</option>
@@ -381,36 +376,34 @@ export function AddIncident() {
 
                   {classifyResult && (
                     <>
-                      <div className="flex items-center gap-3 pt-2">
-                        <div>
-                          <span className="text-xs text-muted">Severity</span>
-                          <p className="text-sm font-semibold text-primary">
-                            {classifyResult.severity_score} / 4 — {getCategoryLabel(null)}
-                          </p>
-                        </div>
+                      <div>
+                        <span className="text-xs font-semibold text-ink block mb-1">AI Structured Summary</span>
+                        <p className="text-xs text-ink bg-blush/30 rounded-xl p-3 leading-relaxed">
+                          {classifyResult.summary}
+                        </p>
                       </div>
-                      {classifyResult.summary && (
-                        <div>
-                          <span className="text-xs text-muted">AI Summary</span>
-                          <p className="text-sm text-ink bg-blush/30 rounded-lg p-2 mt-1">{classifyResult.summary}</p>
-                        </div>
-                      )}
+
                       {classifyResult.people_involved.length > 0 && (
                         <div>
-                          <span className="text-xs text-muted">People mentioned</span>
-                          <div className="flex flex-wrap gap-1 mt-1">
+                          <span className="text-xs font-semibold text-ink block mb-1">Entities / Persons Mentioned</span>
+                          <div className="flex flex-wrap gap-1.5">
                             {classifyResult.people_involved.map((p, i) => (
-                              <span key={i} className="text-xs bg-secondary/15 text-secondary rounded-full px-2 py-0.5">{p}</span>
+                              <span key={i} className="text-xs bg-secondary/10 text-secondary font-medium rounded-full px-2.5 py-0.5">
+                                {p}
+                              </span>
                             ))}
                           </div>
                         </div>
                       )}
+
                       {classifyResult.risk_keywords_detected.length > 0 && (
                         <div>
-                          <span className="text-xs text-muted">Risk keywords detected</span>
-                          <div className="flex flex-wrap gap-1 mt-1">
+                          <span className="text-xs font-semibold text-ink block mb-1">Risk Factors Identified</span>
+                          <div className="flex flex-wrap gap-1.5">
                             {classifyResult.risk_keywords_detected.map((k, i) => (
-                              <span key={i} className="text-xs bg-danger/15 text-danger rounded-full px-2 py-0.5">{k}</span>
+                              <span key={i} className="text-xs bg-danger/10 text-danger font-medium rounded-full px-2.5 py-0.5">
+                                {k}
+                              </span>
                             ))}
                           </div>
                         </div>
@@ -418,39 +411,32 @@ export function AddIncident() {
                     </>
                   )}
                 </div>
+
+                <p className="text-[11px] text-muted italic pt-2 border-t border-blush/40">
+                  Disclaimer: AI structuring is designed to assist evidence organization and is provided for your review. It does not replace legal analysis.
+                </p>
               </div>
 
-              {/* Summary of what will be saved */}
-              <div className="rounded-xl bg-warmwhite border border-blush p-4">
-                <h3 className="font-heading text-sm font-semibold text-primary mb-2">Incident Summary</h3>
-                <div className="space-y-1 text-sm text-ink">
-                  <p><span className="text-muted">Date:</span> {new Date(date).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-                  <p><span className="text-muted">Description:</span> {description.substring(0, 100)}{description.length > 100 ? '...' : ''}</p>
-                  <p><span className="text-muted">Evidence files:</span> {files.length}</p>
-                </div>
-              </div>
-
+              {/* Action Buttons */}
               <div className="flex gap-3">
-                <button
+                <Button
                   onClick={() => setStep('form')}
-                  className="flex-1 rounded-lg border border-primary text-primary py-3 text-sm font-medium hover:bg-primary/5 transition-colors"
+                  variant="outline"
+                  size="lg"
+                  className="flex-1"
                 >
-                  Back to Edit
-                </button>
-                <button
+                  Edit Details
+                </Button>
+
+                <Button
                   onClick={handleConfirm}
-                  disabled={uploading}
-                  className="flex-1 rounded-lg bg-accent text-white py-3 text-sm font-semibold hover:bg-accent-light transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                  variant="primary"
+                  size="lg"
+                  loading={uploading}
+                  className="flex-1"
                 >
-                  {uploading ? (
-                    <>
-                      <Loader2 size={16} className="animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    'Confirm & Save'
-                  )}
-                </button>
+                  {uploading ? 'Encrypted Saving...' : 'Save to Vault'}
+                </Button>
               </div>
             </div>
           )}

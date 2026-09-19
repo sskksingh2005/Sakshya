@@ -9,7 +9,7 @@ export function Calculator() {
   const [prevValue, setPrevValue] = useState<number | null>(null);
   const [operator, setOperator] = useState<string | null>(null);
   const [waitingForOperand, setWaitingForOperand] = useState(false);
-  const [pinBuffer, setPinBuffer] = useState('');
+  const [, setPinBuffer] = useState('');
 
   const inputDigit = useCallback((digit: string) => {
     setPinBuffer((prev) => {

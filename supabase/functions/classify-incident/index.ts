@@ -1,5 +1,3 @@
-import { createClient } from "npm:@supabase/supabase-js@2";
-
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
@@ -83,6 +81,8 @@ function fallbackClassify(description: string, category?: string | null): Classi
       detectedCategory = "economic_abuse";
     } else if (STALKING_KEYWORDS.some((kw) => lower.includes(kw))) {
       detectedCategory = "stalking_control";
+    } else if (VERBAL_KEYWORDS.some((kw) => lower.includes(kw))) {
+      detectedCategory = "verbal_abuse";
     } else {
       detectedCategory = "verbal_abuse";
     }
@@ -162,7 +162,7 @@ async function callOpenAI(description: string, category?: string | null): Promis
   }
 
   // Parse and validate JSON
-  let parsed: any;
+  let parsed: { category?: string; severity_score?: number; summary?: string; people_involved?: string[]; risk_keywords_detected?: string[] };
   try {
     // Strip markdown code fences if present
     const cleaned = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();

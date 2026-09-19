@@ -50,38 +50,20 @@ export async function classifyIncident(
   description: string,
   category?: string | null
 ): Promise<{ result: ClassifyResult | null; error: string | null }> {
-  const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/classify-incident`;
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-  };
-
-  // Get the current session token for authenticated requests
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  if (session) {
-    headers['Authorization'] = `Bearer ${session.access_token}`;
-  }
-
   try {
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ description, category }),
+    const { data, error } = await supabase.functions.invoke<ClassifyResult>('classify-incident', {
+      body: { description, category },
     });
 
-    if (!response.ok) {
-      const errData = await response.json().catch(() => ({}));
-      throw new Error(errData.error || `Request failed (${response.status})`);
+    if (error) {
+      return { result: null, error: error.message };
     }
 
-    const data = await response.json();
-    if (!data.category || typeof data.severity_score !== 'number') {
-      throw new Error('Invalid response from classification service');
+    if (!data || !data.category || typeof data.severity_score !== 'number') {
+      return { result: null, error: 'Invalid response from classification service' };
     }
 
-    return { result: data as ClassifyResult, error: null };
+    return { result: data, error: null };
   } catch (err) {
     return { result: null, error: err instanceof Error ? err.message : 'Unknown error' };
   }

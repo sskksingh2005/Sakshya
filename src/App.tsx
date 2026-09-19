@@ -9,16 +9,13 @@ import { Dossier } from '@/pages/Dossier';
 import { LegalAid } from '@/pages/LegalAid';
 import { Safety } from '@/pages/Safety';
 import { Settings } from '@/pages/Settings';
+import { SakshyaLoader } from '@/components/branding/SakshyaLoader';
 import type { ReactNode } from 'react';
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { session, loading } = useAuth();
   if (loading) {
-    return (
-      <div className="min-h-screen bg-blush flex items-center justify-center">
-        <div className="animate-spin-slow w-8 h-8 border-2 border-primary border-t-transparent rounded-full" />
-      </div>
-    );
+    return <SakshyaLoader message="Sakshya" subtext="Preserving your options." />;
   }
   if (!session) {
     return <Navigate to="/auth" replace />;

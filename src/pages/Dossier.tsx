@@ -1,10 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
-import { FileText, Download, Loader2, FileCheck, AlertCircle } from 'lucide-react';
+import { Download, FileCheck, AlertCircle } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import type { Incident, Evidence } from '@/types';
 import { AppNav } from '@/components/AppNav';
+import { LoadingState } from '@/components/ui/LoadingState';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { Button } from '@/components/ui/Button';
 import { getCategoryLabel, getSeverityLabel } from '@/lib/utils';
 
 export function Dossier() {
@@ -27,7 +30,7 @@ export function Dossier() {
         .from('evidence')
         .select('*');
       const map: Record<string, Evidence[]> = {};
-      (ev || []).forEach((e: any) => {
+      (ev || []).forEach((e: Evidence) => {
         if (!map[e.incident_id]) map[e.incident_id] = [];
         map[e.incident_id].push(e as Evidence);
       });
@@ -208,7 +211,7 @@ export function Dossier() {
       doc.setFontSize(9);
       doc.setTextColor(0x8a, 0x7b, 0x92);
       const partBLines = doc.splitTextToSize(
-        'This section must be completed and signed by a qualified person with demonstrable expertise in computer forensics or computer science, as per the Supreme Court ruling in Pune Bar Association v. Union of India (May 2026). The expert must verify the electronic record and the process of its production. This section is intentionally left blank in this demo.',
+        'This section must be completed and signed by a qualified person with demonstrable expertise in computer forensics or computer science, as per the Supreme Court ruling in Pune Bar Association v. Union of India (May 2026). The expert must verify the electronic record and the process of its production.',
         pageWidth - 2 * margin
       );
       doc.text(partBLines, margin, y);
@@ -257,84 +260,82 @@ export function Dossier() {
   };
 
   return (
-    <div className="min-h-screen bg-blush">
+    <div className="min-h-screen bg-blush/60">
       <AppNav />
-      <main className="md:ml-60 pb-20 md:pb-0">
-        <div className="max-w-2xl mx-auto p-4 md:p-8">
-          <h1 className="font-heading text-2xl font-bold text-primary mb-1">Evidence Dossier</h1>
-          <p className="text-sm text-muted mb-6">
-            Generate a structured PDF with your incident timeline, evidence inventory, and Section 63 certificate draft.
-          </p>
+      <main className="md:ml-60 pb-24 md:pb-8">
+        <div className="max-w-2xl mx-auto p-4 md:p-8 space-y-6">
+          <div>
+            <h1 className="font-heading text-2xl md:text-3xl font-bold text-primary mb-1">Evidence Dossier</h1>
+            <p className="text-xs md:text-sm text-muted">
+              Generate a structured preparation dossier with your incident timeline, evidence inventory, and Section 63 certificate draft.
+            </p>
+          </div>
 
           {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="animate-spin-slow w-8 h-8 border-2 border-primary border-t-transparent rounded-full" />
-            </div>
+            <LoadingState message="Compiling dossier records..." className="py-20" />
           ) : incidents.length === 0 ? (
-            <div className="rounded-2xl bg-warmwhite border border-blush p-8 text-center">
-              <FileText size={32} className="text-muted mx-auto mb-3" />
-              <p className="text-sm font-medium text-ink mb-1">No incidents to include</p>
-              <p className="text-xs text-muted">
-                Add incidents first, then come back to generate your dossier.
-              </p>
-            </div>
+            <EmptyState
+              title="No incidents to include in dossier"
+              description="Add incidents to your vault first, then return here to generate your structured PDF dossier."
+              action={
+                <Button onClick={() => window.location.hash = '#/incidents/new'} variant="primary" size="sm">
+                  Add Incident
+                </Button>
+              }
+            />
           ) : (
-            <>
-              {/* Summary */}
-              <div className="rounded-2xl bg-warmwhite border border-blush p-5 mb-4">
-                <h2 className="font-heading text-base font-semibold text-primary mb-3">Dossier Contents</h2>
-                <div className="space-y-2 text-sm text-ink">
-                  <div className="flex items-center gap-2">
-                    <FileCheck size={16} className="text-success" />
-                    {incidents.length} incident{incidents.length > 1 ? 's' : ''} with full descriptions
+            <div className="space-y-5 animate-fade-in">
+              {/* Summary card */}
+              <div className="rounded-2xl bg-warmwhite border border-blush p-6 shadow-sm space-y-4">
+                <h2 className="font-heading text-base font-semibold text-primary">Dossier Contents Summary</h2>
+                <div className="space-y-3 text-xs text-ink">
+                  <div className="flex items-center gap-2.5">
+                    <FileCheck size={18} className="text-success shrink-0" />
+                    <span><strong>{incidents.length}</strong> incident record{incidents.length > 1 ? 's' : ''} with full descriptions & metadata</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <FileCheck size={16} className="text-success" />
-                    {Object.values(evidenceMap).flat().length} evidence file{Object.values(evidenceMap).flat().length !== 1 ? 's' : ''} with SHA-256 hashes
+                  <div className="flex items-center gap-2.5">
+                    <FileCheck size={18} className="text-success shrink-0" />
+                    <span><strong>{Object.values(evidenceMap).flat().length}</strong> evidence file{Object.values(evidenceMap).flat().length !== 1 ? 's' : ''} with cryptographic SHA-256 hashes</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <FileCheck size={16} className="text-success" />
-                    Section 63 Part A certificate (auto-drafted)
+                  <div className="flex items-center gap-2.5">
+                    <FileCheck size={18} className="text-success shrink-0" />
+                    <span>Section 63(4) Part A certificate draft (Bharatiya Sakshya Adhiniyam, 2023)</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <AlertCircle size={16} className="text-muted" />
-                    Section 63 Part B certificate (blank — requires expert signature)
+                  <div className="flex items-center gap-2.5">
+                    <AlertCircle size={18} className="text-amber-500 shrink-0" />
+                    <span>Section 63(4) Part B certificate template (requires expert signature)</span>
                   </div>
                 </div>
               </div>
 
-              {/* Disclaimer */}
-              <div className="rounded-xl bg-danger/8 border border-danger/20 p-4 mb-6">
-                <p className="text-xs text-ink leading-relaxed">
-                  <strong className="text-danger">Disclaimer:</strong> This dossier is a structured preparation document. It is not automatically admissible in court. Part B of the Section 63(4) certificate must be completed and signed by a qualified expert. Please seek legal guidance before submitting this document as evidence.
-                </p>
+              {/* Legal admissibility disclaimer */}
+              <div className="rounded-2xl bg-warmwhite border border-amber-200 p-5 shadow-sm flex items-start gap-3">
+                <AlertCircle size={20} className="text-amber-600 shrink-0 mt-0.5" />
+                <div className="text-xs text-ink leading-relaxed">
+                  <strong className="text-amber-700 block mb-0.5">Structured Evidence Disclaimer</strong>
+                  This dossier is a structured evidence preparation document. It is not automatically admissible in court. Part B of the Section 63(4) certificate must be completed and signed by a qualified computer forensics expert. Please consult a qualified legal professional before submitting.
+                </div>
               </div>
 
-              {/* Generate button */}
-              <button
+              {/* PDF generation action */}
+              <Button
                 onClick={generatePDF}
-                disabled={generating || !navigator.onLine}
-                className="w-full rounded-lg bg-accent text-white py-3.5 text-sm font-semibold hover:bg-accent-light transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                variant="primary"
+                size="lg"
+                fullWidth
+                loading={generating}
+                disabled={!navigator.onLine}
+                leftIcon={<Download size={18} />}
               >
-                {generating ? (
-                  <>
-                    <Loader2 size={18} className="animate-spin" />
-                    Generating PDF...
-                  </>
-                ) : (
-                  <>
-                    <Download size={18} />
-                    Generate & Download Dossier
-                  </>
-                )}
-              </button>
+                {generating ? 'Generating PDF Dossier...' : 'Generate & Download Dossier'}
+              </Button>
 
               {!navigator.onLine && (
-                <p className="text-xs text-danger text-center mt-2">
-                  You're offline — PDF generation requires an internet connection.
+                <p className="text-xs text-danger text-center">
+                  You are offline. Generating dossier PDF requires an active connection.
                 </p>
               )}
-            </>
+            </div>
           )}
         </div>
       </main>

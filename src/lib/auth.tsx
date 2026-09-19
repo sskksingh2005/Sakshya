@@ -1,13 +1,20 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from './supabase';
+import { mapAuthError } from './authErrorMapper';
+
+export interface AuthResult {
+  error: string | null;
+  rawError?: unknown;
+  needsConfirmation?: boolean;
+}
 
 interface AuthContextType {
   session: Session | null;
   user: User | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
-  signUp: (email: string, password: string) => Promise<{ error: string | null }>;
+  signIn: (email: string, password: string) => Promise<AuthResult>;
+  signUp: (email: string, password: string) => Promise<AuthResult>;
   signOut: () => Promise<void>;
 }
 
@@ -32,14 +39,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = async (email: string, password: string): Promise<AuthResult> => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error: error?.message || null };
+    if (error) {
+      return { error: mapAuthError(error), rawError: error };
+    }
+    return { error: null, needsConfirmation: false };
   };
 
-  const signUp = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signUp({ email, password });
-    return { error: error?.message || null };
+  const signUp = async (email: string, password: string): Promise<AuthResult> => {
+    const { data, error } = await supabase.auth.signUp({ email, password });
+    if (error) {
+      return { error: mapAuthError(error), rawError: error };
+    }
+    const needsConfirmation = Boolean(data.user && !data.session);
+    return { error: null, needsConfirmation };
   };
 
   const signOut = async () => {

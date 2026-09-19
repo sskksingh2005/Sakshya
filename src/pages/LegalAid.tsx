@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Phone, MapPin, ExternalLink, Info } from 'lucide-react';
+import { Phone, MapPin, Info } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import type { Resource, Incident } from '@/types';
+import type { Resource } from '@/types';
 import { AppNav } from '@/components/AppNav';
+import { LoadingState } from '@/components/ui/LoadingState';
 import { getCategoryLabel } from '@/lib/utils';
 
 export function LegalAid() {
@@ -47,73 +48,73 @@ export function LegalAid() {
   });
 
   const typeColors: Record<string, string> = {
-    helpline: 'bg-danger/15 text-danger',
-    nalsa: 'bg-primary/15 text-primary',
-    ncw: 'bg-secondary/15 text-secondary',
-    osc: 'bg-accent/15 text-accent',
-    dlsa: 'bg-success/15 text-success',
+    helpline: 'bg-danger/15 text-danger border-danger/30',
+    nalsa: 'bg-primary/15 text-primary border-primary/30',
+    ncw: 'bg-secondary/15 text-secondary border-secondary/30',
+    osc: 'bg-accent/15 text-accent border-accent/30',
+    dlsa: 'bg-success/15 text-success border-success/30',
   };
 
   return (
-    <div className="min-h-screen bg-blush">
+    <div className="min-h-screen bg-blush/60">
       <AppNav />
-      <main className="md:ml-60 pb-20 md:pb-0">
-        <div className="max-w-2xl mx-auto p-4 md:p-8">
-          <h1 className="font-heading text-2xl font-bold text-primary mb-1">Legal Aid Directory</h1>
-          <p className="text-sm text-muted mb-2">
-            Verified contacts for legal support, helplines, and women's services in India.
-          </p>
+      <main className="md:ml-60 pb-24 md:pb-8">
+        <div className="max-w-2xl mx-auto p-4 md:p-8 space-y-5">
+          <div>
+            <h1 className="font-heading text-2xl md:text-3xl font-bold text-primary mb-1">Support & Legal-Resource Pathways</h1>
+            <p className="text-xs md:text-sm text-muted">
+              Verified contacts for legal support, emergency helplines, and women's protection services in India.
+            </p>
+          </div>
 
-          <div className="rounded-lg bg-secondary/10 border border-secondary/20 p-3 mb-6 flex items-start gap-2">
-            <Info size={16} className="text-secondary shrink-0 mt-0.5" />
-            <p className="text-xs text-ink">
-              <strong>AI-assisted intake preparation — not legal advice.</strong>{' '}
+          <div className="rounded-2xl bg-secondary/10 border border-secondary/20 p-4 flex items-start gap-3">
+            <Info size={18} className="text-secondary shrink-0 mt-0.5" />
+            <p className="text-xs text-ink leading-relaxed">
+              <strong>Support Pathway Prioritization — Not Legal Advice.</strong>{' '}
               {recentCategory
-                ? `Based on your most recent incident (${getCategoryLabel(recentCategory)}), emergency helplines are shown first.`
-                : 'Resources are listed in their default order. Add an incident to get category-based prioritization.'}
+                ? `Based on your most recent incident (${getCategoryLabel(recentCategory)}), urgent helplines are prioritized first.`
+                : 'Resources are listed in standard order. Add an incident to enable category-matched prioritization.'}
             </p>
           </div>
 
           {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="animate-spin-slow w-8 h-8 border-2 border-primary border-t-transparent rounded-full" />
-            </div>
+            <LoadingState message="Loading support directory..." className="py-20" />
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-3.5">
               {sortedResources.map((res) => (
-                <div key={res.id} className="rounded-2xl bg-warmwhite border border-blush p-4 animate-fade-in">
-                  <div className="flex items-start justify-between gap-3 mb-2">
+                <div key={res.id} className="rounded-2xl bg-warmwhite border border-blush/80 p-5 shadow-sm animate-fade-in space-y-3">
+                  <div className="flex items-start justify-between gap-3">
                     <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className={`text-[10px] font-semibold uppercase tracking-wide rounded-full px-2 py-0.5 ${typeColors[res.type] || 'bg-blush text-muted'}`}>
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <span className={`text-[10px] font-semibold uppercase tracking-wider rounded-full px-2.5 py-0.5 border ${typeColors[res.type] || 'bg-blush text-muted border-blush'}`}>
                           {res.type}
                         </span>
                         {res.last_verified && (
-                          <span className="text-[10px] text-muted">
-                            Verified: {new Date(res.last_verified).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
+                          <span className="text-[10px] text-muted font-medium">
+                            Verified {new Date(res.last_verified).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
                           </span>
                         )}
                       </div>
-                      <h3 className="font-heading text-sm font-semibold text-primary">{res.name}</h3>
+                      <h3 className="font-heading text-base font-semibold text-primary">{res.name}</h3>
                     </div>
                   </div>
 
-                  <p className="text-xs text-ink mb-3 leading-relaxed">{res.description}</p>
+                  <p className="text-xs text-ink leading-relaxed">{res.description}</p>
 
                   {res.phone && (
                     <a
                       href={`tel:${res.phone}`}
-                      className="inline-flex items-center gap-2 rounded-lg bg-accent text-white px-4 py-2 text-sm font-medium hover:bg-accent-light transition-colors"
+                      className="inline-flex items-center gap-2 rounded-xl bg-accent text-white px-4 py-2.5 text-xs font-semibold hover:bg-accent-light transition-all shadow-sm active:scale-98"
                     >
                       <Phone size={14} />
-                      {res.phone}
+                      Call {res.phone}
                     </a>
                   )}
 
                   {!res.phone && (res.type === 'osc' || res.type === 'dlsa') && (
-                    <div className="flex items-center gap-1.5 text-xs text-muted">
-                      <MapPin size={12} />
-                      Search online for your nearest location
+                    <div className="flex items-center gap-1.5 text-xs text-muted font-medium pt-1">
+                      <MapPin size={14} className="text-secondary shrink-0" />
+                      Search online for your nearest District Legal Services Authority or One Stop Center
                     </div>
                   )}
                 </div>
@@ -121,9 +122,9 @@ export function LegalAid() {
             </div>
           )}
 
-          <div className="mt-6 rounded-xl bg-warmwhite border border-blush p-4">
+          <div className="rounded-2xl bg-warmwhite border border-blush p-4">
             <p className="text-xs text-muted leading-relaxed">
-              These contacts were manually verified at the time of seeding. Always confirm current availability and numbers before relying on them in an emergency. If you are in immediate danger, call <strong className="text-danger">112</strong> or <strong className="text-danger">181</strong>.
+              Contacts are updated periodically. Always verify emergency availability directly. If you are in immediate physical danger, call <strong className="text-danger">112</strong> or <strong className="text-danger">181</strong> immediately.
             </p>
           </div>
         </div>
