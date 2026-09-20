@@ -137,6 +137,100 @@ export interface DangerFactors {
   overall: { label: string; value: number };
 }
 
+export interface TimelineBriefEvent {
+  date: string;
+  title: string;
+}
+
+export interface TimelineBrief {
+  totalIncidents: number;
+  dateRange: string | null;
+  summary: string;
+  keyEvents: TimelineBriefEvent[];
+  categories: string[];
+  severities: string[];
+  pattern: string | null;
+}
+
+function formatDateLabel(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Unknown date';
+  return date.toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+export function buildTimelineBrief(incidents: Incident[]): TimelineBrief | null {
+  const sorted = [...incidents]
+    .filter((incident) => incident.incident_date)
+    .sort((a, b) => new Date(a.incident_date).getTime() - new Date(b.incident_date).getTime());
+
+  if (sorted.length < 5) {
+    return null;
+  }
+
+  const validDates = sorted.filter((incident) => !Number.isNaN(new Date(incident.incident_date).getTime()));
+  if (validDates.length === 0) {
+    return null;
+  }
+
+  const earliest = validDates[0];
+  const latest = validDates[validDates.length - 1];
+  const categoryCounts = new Map<string, number>();
+  const severityCounts = new Map<string, number>();
+
+  sorted.forEach((incident) => {
+    const category = incident.category ? getCategoryLabel(incident.category) : 'Uncategorized';
+    categoryCounts.set(category, (categoryCounts.get(category) || 0) + 1);
+
+    const severity = incident.severity_score === null ? 'Not classified' : getSeverityLabel(incident.severity_score);
+    severityCounts.set(severity, (severityCounts.get(severity) || 0) + 1);
+  });
+
+  const topCategoryEntry = Array.from(categoryCounts.entries()).sort((a, b) => b[1] - a[1])[0];
+  const topSeverityEntry = Array.from(severityCounts.entries()).sort((a, b) => b[1] - a[1])[0];
+
+  const summaryParts: string[] = [
+    `This account includes ${sorted.length} documented incident${sorted.length === 1 ? '' : 's'}.`,
+  ];
+
+  const dateRange = `${formatDateLabel(earliest.incident_date)} – ${formatDateLabel(latest.incident_date)}`;
+  if (topCategoryEntry) {
+    summaryParts.push(`The most common category was ${topCategoryEntry[0]} (${topCategoryEntry[1]} of ${sorted.length}).`);
+  }
+  if (topSeverityEntry) {
+    summaryParts.push(`The most common severity was ${topSeverityEntry[0]}.`);
+  }
+  summaryParts.push(`The dates span ${dateRange}.`);
+
+  const keyEvents: TimelineBriefEvent[] = sorted
+    .slice(-3)
+    .reverse()
+    .map((incident) => ({
+      date: formatDateLabel(incident.incident_date),
+      title: `${incident.category ? getCategoryLabel(incident.category) : 'Incident'}${incident.severity_score !== null ? ` · ${getSeverityLabel(incident.severity_score)}` : ''}`,
+    }));
+
+  let pattern: string | null = null;
+  if (topCategoryEntry && topCategoryEntry[1] >= 2) {
+    pattern = `${topCategoryEntry[0]} appears in ${topCategoryEntry[1]} of ${sorted.length} incidents in this record.`;
+  } else if (topSeverityEntry && topSeverityEntry[1] >= 2) {
+    pattern = `${topSeverityEntry[0]} is the most frequent severity label across these incidents.`;
+  }
+
+  return {
+    totalIncidents: sorted.length,
+    dateRange,
+    summary: summaryParts.join(' '),
+    keyEvents,
+    categories: Array.from(categoryCounts.keys()),
+    severities: Array.from(severityCounts.keys()),
+    pattern,
+  };
+}
+
 export function computeDangerFactors(incidents: Incident[]): DangerFactors {
   const now = new Date();
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);

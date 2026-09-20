@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Plus, Calendar, ChevronRight, FileText } from 'lucide-react';
+import { Plus, Calendar, ChevronRight, FileText, Sparkles } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import type { Incident } from '@/types';
@@ -12,11 +12,14 @@ import { LoadingState } from '@/components/ui/LoadingState';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/Button';
 import {
+  buildTimelineBrief,
+  classifyIncident,
   computeDangerFactors,
   detectEscalation,
   getCategoryLabel,
   getSeverityLabel,
   getSeverityColor,
+  type TimelineBrief,
 } from '@/lib/utils';
 
 export function Dashboard() {
@@ -26,12 +29,32 @@ export function Dashboard() {
   const [evidenceCounts, setEvidenceCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [timelineBrief, setTimelineBrief] = useState<TimelineBrief | null>(null);
+  const [briefLoading, setBriefLoading] = useState(false);
+  const [briefError, setBriefError] = useState<string | null>(null);
+
+  const userIncidents = useMemo(
+    () => incidents.filter((incident) => incident.user_id === user?.id),
+    [incidents, user?.id]
+  );
+
+  const timelineBriefSignature = useMemo(
+    () =>
+      userIncidents
+        .map(
+          (incident) =>
+            `${incident.id}|${incident.incident_date}|${incident.category ?? ''}|${incident.severity_score ?? ''}|${incident.description.slice(0, 80)}`
+        )
+        .join('|'),
+    [userIncidents]
+  );
 
   const loadIncidents = useCallback(async () => {
     if (!user) return;
     const { data, error } = await supabase
       .from('incidents')
       .select('*')
+      .eq('user_id', user.id)
       .order('incident_date', { ascending: false });
 
     if (error) {
@@ -40,18 +63,22 @@ export function Dashboard() {
       return;
     }
 
-    setIncidents((data || []) as Incident[]);
+    const nextIncidents = (data || []) as Incident[];
+    setIncidents(nextIncidents);
 
-    // Load evidence counts
-    if (data && data.length > 0) {
+    if (nextIncidents.length > 0) {
+      const ids = nextIncidents.map((incident) => incident.id);
       const { data: evidence } = await supabase
         .from('evidence')
-        .select('incident_id');
+        .select('incident_id')
+        .in('incident_id', ids);
       const counts: Record<string, number> = {};
       (evidence || []).forEach((e: { incident_id: string }) => {
         counts[e.incident_id] = (counts[e.incident_id] || 0) + 1;
       });
       setEvidenceCounts(counts);
+    } else {
+      setEvidenceCounts({});
     }
 
     setLoading(false);
@@ -70,8 +97,77 @@ export function Dashboard() {
     };
   }, [loadIncidents]);
 
-  const dangerFactors = computeDangerFactors(incidents);
-  const escalation = detectEscalation(incidents);
+  useEffect(() => {
+    if (!user) {
+      setTimelineBrief(null);
+      setBriefLoading(false);
+      setBriefError(null);
+      return;
+    }
+
+    if (userIncidents.length < 5) {
+      setTimelineBrief(null);
+      setBriefLoading(false);
+      setBriefError(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const generateBrief = async () => {
+      setBriefLoading(true);
+      setBriefError(null);
+
+      const baseBrief = buildTimelineBrief(userIncidents);
+      if (!baseBrief) {
+        if (!cancelled) {
+          setTimelineBrief(null);
+          setBriefLoading(false);
+        }
+        return;
+      }
+
+      try {
+        const combinedNarrative = [...userIncidents]
+          .sort((a, b) => new Date(a.incident_date).getTime() - new Date(b.incident_date).getTime())
+          .map((incident) => incident.description.trim() || incident.ai_summary || 'Incident narrative unavailable')
+          .join('\n\n');
+
+        const { result, error } = await classifyIncident(combinedNarrative, userIncidents[userIncidents.length - 1]?.category ?? null);
+
+        if (cancelled) return;
+
+        const nextBrief: TimelineBrief = {
+          ...baseBrief,
+          summary: result?.summary && result.summary.trim() ? result.summary.trim() : baseBrief.summary,
+        };
+
+        if (error) {
+          setBriefError('Unable to generate the Timeline Brief right now. Your incidents are still safely saved.');
+          setTimelineBrief(nextBrief);
+        } else {
+          setTimelineBrief(nextBrief);
+        }
+      } catch {
+        if (!cancelled) {
+          setBriefError('Unable to generate the Timeline Brief right now. Your incidents are still safely saved.');
+          setTimelineBrief(baseBrief);
+        }
+      } finally {
+        if (!cancelled) {
+          setBriefLoading(false);
+        }
+      }
+    };
+
+    generateBrief();
+    return () => {
+      cancelled = true;
+    };
+  }, [timelineBriefSignature, user, userIncidents]);
+
+  const dangerFactors = computeDangerFactors(userIncidents);
+  const escalation = detectEscalation(userIncidents);
 
   return (
     <div className="min-h-screen bg-blush/60">
@@ -130,14 +226,14 @@ export function Dashboard() {
           <div>
             <div className="flex items-center justify-between mb-3">
               <h2 className="font-heading text-lg font-semibold text-primary">Incident Timeline</h2>
-              {incidents.length > 0 && (
-                <span className="text-xs font-medium text-muted">{incidents.length} recorded incident{incidents.length > 1 ? 's' : ''}</span>
+              {userIncidents.length > 0 && (
+                <span className="text-xs font-medium text-muted">{userIncidents.length} recorded incident{userIncidents.length > 1 ? 's' : ''}</span>
               )}
             </div>
 
             {loading ? (
               <LoadingState message="Loading your evidence records..." />
-            ) : incidents.length === 0 ? (
+            ) : userIncidents.length === 0 ? (
               <EmptyState
                 title="No incidents recorded yet"
                 description="When you're ready, you can start documenting here. Your records are private, timestamped, and stored securely."
@@ -154,7 +250,7 @@ export function Dashboard() {
               />
             ) : (
               <div className="space-y-3">
-                {incidents.map((inc) => (
+                {userIncidents.map((inc) => (
                   <Link
                     key={inc.id}
                     to={`/incidents/${inc.id}`}
@@ -214,6 +310,88 @@ export function Dashboard() {
               </div>
             )}
           </div>
+
+          {userIncidents.length >= 5 && (
+            <div className="rounded-2xl bg-warmwhite border border-blush p-5 shadow-sm">
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <h2 className="font-heading text-lg font-semibold text-primary">Incident Timeline Brief</h2>
+                {briefLoading && (
+                  <span className="flex items-center gap-2 text-xs text-muted font-medium">
+                    <Sparkles size={14} className="text-accent" />
+                    Generating Timeline Brief...
+                  </span>
+                )}
+              </div>
+
+              {briefLoading && (
+                <div className="rounded-xl bg-blush/20 border border-blush p-3 text-xs text-muted flex items-center gap-2">
+                  <Sparkles size={14} className="text-accent" />
+                  Generating Timeline Brief...
+                </div>
+              )}
+
+              {briefError && (
+                <div className="rounded-xl bg-danger/10 border border-danger/20 p-3 text-xs text-danger">
+                  Unable to generate the Timeline Brief right now. Your incidents are still safely saved.
+                </div>
+              )}
+
+              {!briefLoading && timelineBrief && (
+                <div className="space-y-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Incidents documented: {timelineBrief.totalIncidents}</p>
+
+                  {timelineBrief.dateRange && (
+                    <p className="text-xs text-muted">
+                      <span className="font-semibold text-ink">Date range:</span> {timelineBrief.dateRange}
+                    </p>
+                  )}
+
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted mb-1">Summary</p>
+                    <p className="text-sm text-ink leading-relaxed">{timelineBrief.summary}</p>
+                  </div>
+
+                  {timelineBrief.keyEvents.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted mb-2">Key Events</p>
+                      <ul className="space-y-2 text-sm text-ink">
+                        {timelineBrief.keyEvents.map((event) => (
+                          <li key={`${event.date}-${event.title}`} className="flex gap-3">
+                            <span className="text-muted mt-0.5">•</span>
+                            <span>
+                              <span className="font-semibold text-primary">{event.date}</span> — {event.title}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {(timelineBrief.categories.length > 0 || timelineBrief.severities.length > 0) && (
+                    <div className="flex flex-wrap gap-2 text-xs text-muted">
+                      {timelineBrief.categories.map((category) => (
+                        <span key={category} className="bg-blush/40 text-secondary px-2.5 py-1 rounded-full font-medium">
+                          {category}
+                        </span>
+                      ))}
+                      {timelineBrief.severities.map((severity) => (
+                        <span key={severity} className="bg-secondary/10 text-primary px-2.5 py-1 rounded-full font-medium">
+                          {severity}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {timelineBrief.pattern && (
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted mb-1">Pattern / Trend</p>
+                      <p className="text-sm text-ink leading-relaxed">{timelineBrief.pattern}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </main>
     </div>
