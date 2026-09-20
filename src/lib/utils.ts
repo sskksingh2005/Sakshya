@@ -69,6 +69,221 @@ export async function classifyIncident(
   }
 }
 
+export interface WhatsAppMessage {
+  id: string;
+  date: string | null;
+  time: string | null;
+  sender: string | null;
+  text: string;
+  raw: string;
+}
+
+export interface WhatsAppImportData {
+  fileName: string;
+  messages: WhatsAppMessage[];
+  participants: string[];
+  dateRange: { start: string | null; end: string | null } | null;
+  preview: string;
+}
+
+function isWhatsAppSystemMessage(text: string): boolean {
+  const normalized = text.toLowerCase();
+  return (
+    normalized.includes('messages and calls are end-to-end encrypted') ||
+    normalized.includes('security code changed') ||
+    normalized.includes('created this group') ||
+    normalized.includes('added you') ||
+    normalized.includes('left') ||
+    normalized.includes('joined using this link') ||
+    normalized.includes('changed the group description') ||
+    normalized.includes('changed this group') ||
+    normalized.includes('message deleted') ||
+    normalized.includes('this message was deleted') ||
+    normalized.includes('you were added')
+  );
+}
+
+function normalizeWhatsAppDate(rawDate: string): string | null {
+  const trimmed = rawDate.trim();
+  if (!trimmed) return null;
+
+  const isoMatch = trimmed.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+  if (isoMatch) {
+    const [, year, month, day] = isoMatch;
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  }
+
+  const euMatch = trimmed.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
+  if (euMatch) {
+    const [, day, month, yearPart] = euMatch;
+    const year = Number(yearPart) < 100 ? 2000 + Number(yearPart) : Number(yearPart);
+    return `${year}-${Number(month).toString().padStart(2, '0')}-${Number(day).toString().padStart(2, '0')}`;
+  }
+
+  return null;
+}
+
+function parseImportedMessageLine(line: string): {
+  date: string | null;
+  time: string | null;
+  sender: string | null;
+  text: string;
+} | null {
+  const trimmed = line.trim();
+  if (!trimmed || isWhatsAppSystemMessage(trimmed)) return null;
+
+  const bracketMatch = trimmed.match(/^\[(.+?),\s*(.+?)\]\s*([^:]+):\s*(.*)$/);
+  if (bracketMatch) {
+    const [, rawDate, rawTime, sender, text] = bracketMatch;
+    return {
+      date: normalizeWhatsAppDate(rawDate),
+      time: rawTime ? rawTime.trim() : null,
+      sender: sender ? sender.trim() : null,
+      text: text.trim(),
+    };
+  }
+
+  const dashMatch = trimmed.match(/^(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}),\s*([^\-]+?)\s*-\s*([^:]+):\s*(.*)$/);
+  if (dashMatch) {
+    const [, rawDate, rawTime, sender, text] = dashMatch;
+    return {
+      date: normalizeWhatsAppDate(rawDate),
+      time: rawTime ? rawTime.trim() : null,
+      sender: sender ? sender.trim() : null,
+      text: text.trim(),
+    };
+  }
+
+  const bareMatch = trimmed.match(/^([^:]+):\s*(.*)$/);
+  if (bareMatch && !trimmed.startsWith('[')) {
+    const [, sender, text] = bareMatch;
+    if (!sender || !text) return null;
+    return {
+      date: null,
+      time: null,
+      sender: sender.trim(),
+      text: text.trim(),
+    };
+  }
+
+  return null;
+}
+
+export function parseWhatsAppChat(content: string): WhatsAppImportData | null {
+  const text = (content || '').trim();
+  if (!text) {
+    return null;
+  }
+
+  const messages: WhatsAppMessage[] = [];
+  let current: WhatsAppMessage | null = null;
+
+  const lines = text.split(/\r?\n/);
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    const parsed = parseImportedMessageLine(trimmed);
+    if (parsed) {
+      if (current && current.text.trim()) {
+        messages.push(current);
+      }
+      current = {
+        id: `${messages.length + 1}-${Date.now()}`,
+        date: parsed.date,
+        time: parsed.time,
+        sender: parsed.sender,
+        text: parsed.text,
+        raw: trimmed,
+      };
+      continue;
+    }
+
+    if (current && trimmed) {
+      current.text = `${current.text}\n${trimmed}`.trim();
+      current.raw = `${current.raw}\n${trimmed}`;
+    }
+  }
+
+  if (current && current.text.trim()) {
+    messages.push(current);
+  }
+
+  const validMessages = messages.filter((item) => item.text && item.text.trim().length > 0);
+  if (validMessages.length === 0) {
+    return null;
+  }
+
+  const participants = [...new Set(validMessages.map((item) => item.sender).filter(Boolean) as string[])];
+  const dates = validMessages.map((item) => item.date).filter(Boolean) as string[];
+  const dateRange = dates.length > 0
+    ? { start: dates.reduce((min, current) => (current < min ? current : min), dates[0]), end: dates.reduce((max, current) => (current > max ? current : max), dates[0]) }
+    : null;
+
+  const preview = validMessages.slice(0, 3).map((message) => {
+    const label = message.sender ? `${message.sender}: ` : '';
+    return `${label}${message.text}`;
+  }).join('\n\n');
+
+  return {
+    fileName: 'WhatsApp Chat',
+    messages: validMessages,
+    participants,
+    dateRange,
+    preview,
+  };
+}
+
+export async function analyzeWhatsAppChat(
+  importData: WhatsAppImportData,
+  category?: string | null
+): Promise<{ description: string; category: string | null; severity_score: number; people_involved: string[]; risk_keywords_detected: string[]; summary: string; date: string | null; error: string | null }> {
+  if (!importData.messages.length) {
+    return {
+      description: '',
+      category: category || null,
+      severity_score: 1,
+      people_involved: [],
+      risk_keywords_detected: [],
+      summary: '',
+      date: importData.dateRange?.start || null,
+      error: 'No valid WhatsApp messages were found in this file.',
+    };
+  }
+
+  const participants = importData.participants.length > 0 ? importData.participants.join(', ') : 'unknown participants';
+  const dateText = importData.dateRange
+    ? ` between ${importData.dateRange.start ?? 'an unknown date'} and ${importData.dateRange.end ?? 'an unknown date'}`
+    : '';
+
+  const messageQuotes = importData.messages
+    .map((item) => item.text)
+    .filter((text) => text.length > 0)
+    .slice(0, 3)
+    .join(' ');
+
+  const description = [
+    `Based only on the imported WhatsApp chat file, this conversation includes ${importData.messages.length} messages from ${participants}${dateText}.`,
+    messageQuotes
+      ? `The imported messages contain statements such as: "${messageQuotes.slice(0, 280)}".`
+      : 'The file contains message content, but no clear statement was available for a direct quote in the imported text.',
+    'This summary is based only on the imported WhatsApp content and should be reviewed before saving as an incident record.',
+  ].join(' ');
+
+  const { result, error } = await classifyIncident(description, category || null);
+
+  return {
+    description: result?.summary?.trim() || description,
+    category: result?.category || category || null,
+    severity_score: result?.severity_score || 1,
+    people_involved: result?.people_involved || importData.participants,
+    risk_keywords_detected: result?.risk_keywords_detected || [],
+    summary: result?.summary?.trim() || description,
+    date: importData.dateRange?.start || null,
+    error: error ? 'AI analysis could not complete for this WhatsApp import. Please review the messages and make any needed edits before saving.' : null,
+  };
+}
+
 export interface EscalationAnalysis {
   isEscalating: boolean;
   reasons: string[];

@@ -1,9 +1,17 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Upload, Hash, Loader2, Check, AlertCircle, FileText, Info } from 'lucide-react';
+import { ArrowLeft, Upload, Hash, Loader2, Check, AlertCircle, FileText, Info, MessageSquareText } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
-import { uploadEvidence, classifyIncident, computeSHA256, detectEscalation } from '@/lib/utils';
+import {
+  uploadEvidence,
+  classifyIncident,
+  computeSHA256,
+  detectEscalation,
+  parseWhatsAppChat,
+  analyzeWhatsAppChat,
+  type WhatsAppImportData,
+} from '@/lib/utils';
 import type { ClassifyResult, Incident } from '@/types';
 import { AppNav } from '@/components/AppNav';
 import { Button } from '@/components/ui/Button';
@@ -27,6 +35,7 @@ export function AddIncident() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const whatsappFileInputRef = useRef<HTMLInputElement>(null);
 
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [description, setDescription] = useState('');
@@ -35,9 +44,12 @@ export function AddIncident() {
   const [hashing, setHashing] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [classifying, setClassifying] = useState(false);
+  const [analyzingWhatsApp, setAnalyzingWhatsApp] = useState(false);
   const [classifyResult, setClassifyResult] = useState<ClassifyResult | null>(null);
   const [classifyError, setClassifyError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [whatsappImport, setWhatsappImport] = useState<WhatsAppImportData | null>(null);
+  const [whatsappImportError, setWhatsappImportError] = useState<string | null>(null);
   const [step, setStep] = useState<'form' | 'review'>('form');
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -72,6 +84,93 @@ export function AddIncident() {
     setFiles((prev) =>
       prev.map((f, i) => (i === index ? { ...f, consentStatus: consent } : f))
     );
+  };
+
+  const handleWhatsAppFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = e.target.files;
+    if (!selected || selected.length === 0) return;
+
+    const file = selected[0];
+    if (!file.name.toLowerCase().endsWith('.txt')) {
+      setWhatsappImportError('Please choose a plain-text WhatsApp export (.txt) file.');
+      e.target.value = '';
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setWhatsappImportError('This chat export is too large. Please choose a smaller .txt file under 5MB.');
+      e.target.value = '';
+      return;
+    }
+
+    try {
+      const content = await file.text();
+      const parsed = parseWhatsAppChat(content);
+      if (!parsed || parsed.messages.length === 0) {
+        setWhatsappImportError('This file does not look like a valid WhatsApp export or contains no readable messages.');
+        e.target.value = '';
+        return;
+      }
+
+      const hash = await computeSHA256(file);
+      const whatsappFileEntry: UploadedFile = {
+        file,
+        hash,
+        consentStatus: 'obtained',
+      };
+
+      setFiles((prev) => {
+        const exists = prev.some((item) => item.file.name === file.name && item.file.size === file.size);
+        return exists ? prev : [...prev, whatsappFileEntry];
+      });
+
+      setWhatsappImport({ ...parsed, fileName: file.name });
+      setWhatsappImportError(null);
+      setError(null);
+      if (parsed.dateRange?.start) {
+        setDate(parsed.dateRange.start);
+      }
+    } catch {
+      setWhatsappImportError('This WhatsApp export could not be read. Please try a different file.');
+    } finally {
+      e.target.value = '';
+    }
+  };
+
+  const handleAnalyzeWhatsApp = async () => {
+    if (!whatsappImport) {
+      setWhatsappImportError('Import a WhatsApp chat first.');
+      return;
+    }
+
+    setAnalyzingWhatsApp(true);
+    setWhatsappImportError(null);
+    setError(null);
+
+    try {
+      const result = await analyzeWhatsAppChat(whatsappImport, category || null);
+      if (!result.description) {
+        setWhatsappImportError(result.error || 'Unable to analyze this WhatsApp export.');
+        return;
+      }
+
+      setDescription(result.description);
+      if (result.category) setCategory(result.category);
+      if (result.date) setDate(result.date);
+      setClassifyResult({
+        category: result.category || category || 'verbal_abuse',
+        severity_score: result.severity_score || 1,
+        summary: result.summary,
+        people_involved: result.people_involved,
+        risk_keywords_detected: result.risk_keywords_detected,
+        fallback_used: false,
+      });
+      setClassifyError(result.error);
+    } catch {
+      setWhatsappImportError('Unable to generate a summary from this WhatsApp export. Please review the imported messages manually.');
+    } finally {
+      setAnalyzingWhatsApp(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -243,6 +342,82 @@ export function AddIncident() {
                     AI-assisted classification will analyze and suggest details based on your account.
                   </p>
                 </div>
+              </div>
+
+              <div className="rounded-2xl bg-warmwhite border border-blush p-5 shadow-sm space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <label className="block text-xs font-semibold text-ink">WhatsApp Import</label>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => whatsappFileInputRef.current?.click()}
+                  >
+                    Import WhatsApp Chat
+                  </Button>
+                </div>
+
+                <input
+                  ref={whatsappFileInputRef}
+                  type="file"
+                  accept=".txt,text/plain"
+                  onChange={handleWhatsAppFileSelect}
+                  className="hidden"
+                />
+
+                <p className="text-[11px] text-muted">
+                  Import a plain-text WhatsApp export to review the messages, then generate a safe incident description based on the actual chat content.
+                </p>
+
+                {whatsappImportError && (
+                  <div className="rounded-xl bg-danger/10 border border-danger/20 p-3 text-xs text-danger flex items-start gap-2">
+                    <AlertCircle size={14} className="shrink-0 mt-0.5" />
+                    <span>{whatsappImportError}</span>
+                  </div>
+                )}
+
+                {whatsappImport && (
+                  <div className="rounded-xl bg-blush/30 border border-blush p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold text-ink truncate">{whatsappImport.fileName}</p>
+                        <p className="text-[11px] text-muted mt-1">
+                          {whatsappImport.messages.length} parsed messages
+                          {whatsappImport.participants.length > 0 ? ` • Participants: ${whatsappImport.participants.join(', ')}` : ''}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setWhatsappImport(null)}
+                        className="text-[11px] text-danger font-semibold hover:underline shrink-0"
+                      >
+                        Remove
+                      </button>
+                    </div>
+
+                    {whatsappImport.dateRange && (
+                      <p className="text-[11px] text-muted">
+                        Date range: {whatsappImport.dateRange.start || 'Unknown'} to {whatsappImport.dateRange.end || 'Unknown'}
+                      </p>
+                    )}
+
+                    <div className="rounded-lg bg-warmwhite border border-blush p-3">
+                      <p className="text-[11px] font-semibold text-ink mb-2">Preview</p>
+                      <p className="text-[11px] text-muted whitespace-pre-line leading-relaxed">{whatsappImport.preview}</p>
+                    </div>
+
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleAnalyzeWhatsApp}
+                      loading={analyzingWhatsApp}
+                      leftIcon={<MessageSquareText size={14} />}
+                    >
+                      {analyzingWhatsApp ? 'Analyzing...' : 'Analyze with AI'}
+                    </Button>
+                  </div>
+                )}
               </div>
 
               {/* Evidence File Dropzone */}
