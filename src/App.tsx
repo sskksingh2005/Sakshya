@@ -11,6 +11,7 @@ import { LegalAid } from '@/pages/LegalAid';
 import { Safety } from '@/pages/Safety';
 import { Settings } from '@/pages/Settings';
 import { SakshyaLoader } from '@/components/branding/SakshyaLoader';
+import { ScrollToTop } from '@/components/ScrollToTop';
 import type { ReactNode } from 'react';
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
@@ -46,6 +47,7 @@ export default function App() {
     <ThemeProvider>
       <AuthProvider>
         <HashRouter>
+          <ScrollToTop />
           <AppRoutes />
         </HashRouter>
       </AuthProvider>

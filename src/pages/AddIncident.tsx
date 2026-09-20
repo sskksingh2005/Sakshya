@@ -1,6 +1,6 @@
-import { useState, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Upload, Hash, Loader2, Check, AlertCircle, FileText, Info, MessageSquareText } from 'lucide-react';
+import { ArrowLeft, Upload, Hash, Loader2, Check, AlertCircle, FileText, Info, MessageSquareText, Mic, Square, RotateCcw, Volume2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import {
@@ -15,6 +15,7 @@ import {
 import type { ClassifyResult, Incident } from '@/types';
 import { AppNav } from '@/components/AppNav';
 import { Button } from '@/components/ui/Button';
+import { transcribeAudio } from '@/lib/transcription';
 
 const CATEGORIES = [
   { value: '', label: 'Let AI suggest a category' },
@@ -36,6 +37,11 @@ export function AddIncident() {
   const { user } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const whatsappFileInputRef = useRef<HTMLInputElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordingStartedAtRef = useRef<number | null>(null);
+  const audioUrlRef = useRef<string | null>(null);
 
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [description, setDescription] = useState('');
@@ -51,6 +57,121 @@ export function AddIncident() {
   const [whatsappImport, setWhatsappImport] = useState<WhatsAppImportData | null>(null);
   const [whatsappImportError, setWhatsappImportError] = useState<string | null>(null);
   const [step, setStep] = useState<'form' | 'review'>('form');
+  const [recording, setRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [transcribing, setTranscribing] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!recording) return;
+    const timer = window.setInterval(() => {
+      if (recordingStartedAtRef.current) {
+        setRecordingDuration(Math.floor((Date.now() - recordingStartedAtRef.current) / 1000));
+      }
+    }, 250);
+    return () => window.clearInterval(timer);
+  }, [recording]);
+
+  useEffect(() => {
+    return () => {
+      mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+      if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+    };
+  }, []);
+
+  const formatDuration = (seconds: number) =>
+    `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')}`;
+
+  const startRecording = async () => {
+    setVoiceError(null);
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setVoiceError('Microphone recording is not supported by this browser.');
+      return;
+    }
+    if (!window.MediaRecorder) {
+      setVoiceError('Recording is not supported by this browser.');
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus']
+        .find((type) => MediaRecorder.isTypeSupported(type));
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+
+      mediaStreamRef.current = stream;
+      mediaRecorderRef.current = recorder;
+      audioChunksRef.current = [];
+      recordingStartedAtRef.current = Date.now();
+      setRecordingDuration(0);
+      setRecording(true);
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) audioChunksRef.current.push(event.data);
+      };
+      recorder.onerror = () => {
+        setVoiceError('Recording could not be completed. Please try again.');
+        stream.getTracks().forEach((track) => track.stop());
+        setRecording(false);
+      };
+      recorder.onstop = () => {
+        stream.getTracks().forEach((track) => track.stop());
+        mediaStreamRef.current = null;
+        const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+        setRecording(false);
+        if (blob.size === 0) {
+          setVoiceError('The recording was empty. Please try again.');
+          return;
+        }
+        if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+        const nextUrl = URL.createObjectURL(blob);
+        audioUrlRef.current = nextUrl;
+        setAudioBlob(blob);
+        setAudioUrl(nextUrl);
+      };
+      recorder.start();
+    } catch (err) {
+      mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+      setVoiceError(err instanceof DOMException && err.name === 'NotAllowedError'
+        ? 'Microphone permission was denied.'
+        : 'Microphone permission is required to record audio.');
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current?.state === 'recording') mediaRecorderRef.current.stop();
+    mediaRecorderRef.current = null;
+  };
+
+  const resetRecording = () => {
+    if (mediaRecorderRef.current?.state === 'recording') mediaRecorderRef.current.stop();
+    mediaRecorderRef.current = null;
+    mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+    mediaStreamRef.current = null;
+    if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+    audioUrlRef.current = null;
+    setAudioBlob(null);
+    setAudioUrl(null);
+    setRecordingDuration(0);
+    setVoiceError(null);
+  };
+
+  const handleTranscribe = async () => {
+    if (!audioBlob || transcribing) return;
+    setTranscribing(true);
+    setVoiceError(null);
+    try {
+      const transcript = await transcribeAudio(audioBlob);
+      setDescription(transcript);
+    } catch (err) {
+      setVoiceError(err instanceof Error ? err.message : 'Transcription failed. Your recording has not been deleted.');
+    } finally {
+      setTranscribing(false);
+    }
+  };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files;
@@ -233,6 +354,15 @@ export function AddIncident() {
       if (incError) throw new Error(incError.message);
       if (!incData) throw new Error('Failed to create incident record');
 
+      if (audioBlob) {
+        const extension = audioBlob.type.includes('mp4') ? 'm4a' : audioBlob.type.includes('ogg') ? 'ogg' : 'webm';
+        const recordingFile = new File([audioBlob], `voice-recording-${Date.now()}.${extension}`, {
+          type: audioBlob.type || 'audio/webm',
+        });
+        const { error: recordingError } = await uploadEvidence(recordingFile, incData.id, user.id, 'unsure');
+        if (recordingError) throw new Error(`Audio upload failed. ${recordingError}`);
+      }
+
       // Upload evidence files
       for (const f of files) {
         const { error: evErr } = await uploadEvidence(
@@ -325,6 +455,55 @@ export function AddIncident() {
                     className="w-full rounded-xl border border-blush bg-blush/20 px-3.5 py-2.5 text-sm text-ink focus:border-accent focus:bg-warmwhite dark:focus:bg-primary-dark/30 focus:outline-none resize-y leading-relaxed transition-all"
                     placeholder="Describe the incident as clearly as you recall. This narrative will be preserved exactly as written."
                   />
+                  <div className="mt-3 rounded-xl border border-blush bg-blush/20 p-3 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Mic size={16} className="text-secondary" />
+                        <span className="text-xs font-semibold text-ink">Voice recording</span>
+                      </div>
+                      {recording && (
+                        <span className="text-xs font-semibold text-danger" aria-live="polite">
+                          <span aria-hidden="true">●</span> Recording {formatDuration(recordingDuration)}
+                        </span>
+                      )}
+                    </div>
+
+                    {!recording && !audioUrl && (
+                      <Button type="button" variant="secondary" size="sm" onClick={startRecording} leftIcon={<Mic size={14} />}>
+                        Record Voice
+                      </Button>
+                    )}
+
+                    {recording && (
+                      <Button type="button" variant="danger" size="sm" onClick={stopRecording} leftIcon={<Square size={14} />}>
+                        Stop Recording
+                      </Button>
+                    )}
+
+                    {!recording && audioUrl && (
+                      <div className="space-y-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <audio src={audioUrl} controls className="h-9 max-w-full" aria-label="Recorded incident audio" />
+                          <span className="text-[11px] text-muted">Duration {formatDuration(recordingDuration)}</span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button type="button" variant="outline" size="sm" onClick={resetRecording} leftIcon={<RotateCcw size={14} />}>
+                            Re-record
+                          </Button>
+                          <Button type="button" variant="secondary" size="sm" onClick={handleTranscribe} loading={transcribing} leftIcon={<Volume2 size={14} />}>
+                            {transcribing ? 'Converting recording to text...' : 'Convert to Text'}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {voiceError && (
+                      <p className="text-xs text-danger" role="alert">{voiceError}</p>
+                    )}
+                    <p className="text-[11px] text-muted">
+                      The recording stays on this device until you save or re-record. The transcript will remain editable.
+                    </p>
+                  </div>
                 </div>
 
                 <div>
