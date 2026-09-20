@@ -1,7 +1,21 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Calendar, Tag, AlertTriangle, FileText, Hash, Download } from 'lucide-react';
+import {
+  ArrowLeft,
+  Calendar,
+  Tag,
+  AlertTriangle,
+  FileText,
+  Hash,
+  Download,
+  PencilLine,
+  Save,
+  X,
+  AlertCircle,
+  CheckCircle2,
+} from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth';
 import type { Incident, Evidence } from '@/types';
 import { AppNav } from '@/components/AppNav';
 import { LoadingState } from '@/components/ui/LoadingState';
@@ -9,16 +23,43 @@ import { ErrorState } from '@/components/ui/ErrorState';
 import { Button } from '@/components/ui/Button';
 import { getCategoryLabel, getSeverityLabel, getSeverityColor } from '@/lib/utils';
 
+const EDITABLE_CATEGORIES = [
+  { value: '', label: 'Let AI suggest a category' },
+  { value: 'verbal_abuse', label: 'Verbal / Emotional Abuse' },
+  { value: 'threat', label: 'Threat / Intimidation' },
+  { value: 'physical_abuse', label: 'Physical Abuse' },
+  { value: 'economic_abuse', label: 'Economic Abuse' },
+  { value: 'stalking_control', label: 'Stalking / Control' },
+];
+
+interface IncidentFormState {
+  incident_date: string;
+  description: string;
+  category: string;
+}
+
 export function IncidentDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [incident, setIncident] = useState<Incident | null>(null);
   const [evidence, setEvidence] = useState<Evidence[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingConsent, setUpdatingConsent] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [draft, setDraft] = useState<IncidentFormState>({
+    incident_date: '',
+    description: '',
+    category: '',
+  });
 
   const loadIncident = useCallback(async () => {
     if (!id) return;
+    setLoading(true);
     const { data: inc, error: incErr } = await supabase
       .from('incidents')
       .select('*')
@@ -26,10 +67,18 @@ export function IncidentDetail() {
       .maybeSingle();
 
     if (incErr || !inc) {
+      setIncident(null);
+      setEvidence([]);
       setLoading(false);
       return;
     }
+
     setIncident(inc as Incident);
+    setDraft({
+      incident_date: inc.incident_date || '',
+      description: inc.description || '',
+      category: inc.category || '',
+    });
 
     const { data: ev } = await supabase
       .from('evidence')
@@ -43,6 +92,92 @@ export function IncidentDetail() {
   useEffect(() => {
     loadIncident();
   }, [loadIncident]);
+
+  const validateDraft = (currentDraft: IncidentFormState) => {
+    const nextErrors: Record<string, string> = {};
+    const trimmedDescription = currentDraft.description.trim();
+
+    if (!currentDraft.incident_date.trim()) {
+      nextErrors.incident_date = 'Incident date is required.';
+    } else {
+      const parsedDate = new Date(`${currentDraft.incident_date}T00:00:00`);
+      if (Number.isNaN(parsedDate.getTime())) {
+        nextErrors.incident_date = 'Please provide a valid incident date.';
+      } else if (parsedDate > new Date(new Date().setHours(23, 59, 59, 999))) {
+        nextErrors.incident_date = 'Incident date cannot be in the future.';
+      }
+    }
+
+    if (!trimmedDescription) {
+      nextErrors.description = 'Incident narrative is required.';
+    }
+
+    return nextErrors;
+  };
+
+  const openEditForm = () => {
+    if (!incident) return;
+    setSaveError(null);
+    setSuccessMessage(null);
+    setValidationErrors({});
+    setDraft({
+      incident_date: incident.incident_date,
+      description: incident.description,
+      category: incident.category || '',
+    });
+    setIsEditing(true);
+  };
+
+  const handleSave = async () => {
+    if (!id || !user) {
+      setSaveError('You must be signed in to edit this incident.');
+      return;
+    }
+
+    const nextErrors = validateDraft(draft);
+    setValidationErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) {
+      return;
+    }
+
+    setSaving(true);
+    setSaveError(null);
+    setSuccessMessage(null);
+
+    try {
+      const { data, error } = await supabase
+        .from('incidents')
+        .update({
+          incident_date: draft.incident_date,
+          description: draft.description.trim(),
+          category: draft.category || null,
+        })
+        .eq('id', id)
+        .eq('user_id', user.id)
+        .select()
+        .single();
+
+      if (error) {
+        const message = error.message || 'Unable to save incident changes.';
+        if (/permission|policy|forbidden|row level security|not found/i.test(message)) {
+          throw new Error('You do not have permission to edit this incident, or it could not be found.');
+        }
+        throw new Error(message);
+      }
+
+      if (!data) {
+        throw new Error('The incident could not be found or is not accessible to your account.');
+      }
+
+      setIsEditing(false);
+      await loadIncident();
+      setSuccessMessage('Incident updated successfully.');
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Something went wrong while saving the incident.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const updateConsent = async (evId: string, consent: string) => {
     setUpdatingConsent(evId);
@@ -111,21 +246,145 @@ export function IncidentDetail() {
             Back to Dashboard
           </button>
 
-          {/* Incident header card */}
+          {successMessage && (
+            <div className="rounded-xl border border-success/30 bg-success/10 px-4 py-3 flex items-start gap-2 text-xs text-success">
+              <CheckCircle2 size={16} className="mt-0.5 shrink-0" />
+              <span>{successMessage}</span>
+            </div>
+          )}
+
           <div className="rounded-2xl bg-warmwhite border border-blush p-6 shadow-sm space-y-4 animate-fade-in">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-1.5 text-xs text-muted font-medium bg-blush/40 px-3 py-1 rounded-full">
                 <Calendar size={13} />
                 {new Date(incident.incident_date).toLocaleDateString('en-IN', {
                   day: 'numeric', month: 'long', year: 'numeric',
                 })}
               </div>
-              <span className="text-[11px] text-muted font-mono">ID: {incident.id.substring(0, 8)}...</span>
+              <Button
+                onClick={openEditForm}
+                variant="secondary"
+                size="sm"
+                leftIcon={<PencilLine size={14} />}
+                disabled={saving}
+              >
+                Edit Incident
+              </Button>
             </div>
 
             <h1 className="font-heading text-xl font-bold text-primary">Incident Record</h1>
 
-            {/* Category & severity badges */}
+            {isEditing && (
+              <div className="rounded-2xl border border-primary/20 bg-blush/20 p-4 space-y-4">
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="font-heading text-base font-semibold text-primary">Edit Incident</h2>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsEditing(false);
+                      setSaveError(null);
+                      setValidationErrors({});
+                    }}
+                    className="text-muted hover:text-primary transition-colors"
+                    aria-label="Cancel editing"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+
+                {saveError && (
+                  <div className="rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 flex items-start gap-2 text-[11px] text-danger">
+                    <AlertCircle size={14} className="mt-0.5 shrink-0" />
+                    <span>{saveError}</span>
+                  </div>
+                )}
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-ink mb-1.5">Date of Incident</label>
+                    <input
+                      type="date"
+                      value={draft.incident_date}
+                      max={new Date().toISOString().split('T')[0]}
+                      onChange={(e) => {
+                        setDraft((prev) => ({ ...prev, incident_date: e.target.value }));
+                        setValidationErrors((prev) => ({ ...prev, incident_date: '' }));
+                        setSaveError(null);
+                      }}
+                      className="w-full rounded-xl border border-blush bg-blush/20 px-3.5 py-2.5 text-sm text-ink focus:border-accent focus:bg-white focus:outline-none transition-all"
+                    />
+                    {validationErrors.incident_date && (
+                      <p className="mt-1 text-[11px] text-danger">{validationErrors.incident_date}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-ink mb-1.5">Category</label>
+                    <select
+                      value={draft.category}
+                      onChange={(e) => {
+                        setDraft((prev) => ({ ...prev, category: e.target.value }));
+                        setSaveError(null);
+                      }}
+                      className="w-full rounded-xl border border-blush bg-blush/20 px-3.5 py-2.5 text-sm text-ink focus:border-accent focus:bg-white focus:outline-none transition-all"
+                    >
+                      {EDITABLE_CATEGORIES.map((option) => (
+                        <option key={option.value || 'unspecified'} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-ink mb-1.5">
+                      What happened? <span className="text-muted font-normal">(in your own words)</span>
+                    </label>
+                    <textarea
+                      value={draft.description}
+                      onChange={(e) => {
+                        setDraft((prev) => ({ ...prev, description: e.target.value }));
+                        setValidationErrors((prev) => ({ ...prev, description: '' }));
+                        setSaveError(null);
+                      }}
+                      rows={6}
+                      className="w-full rounded-xl border border-blush bg-blush/20 px-3.5 py-2.5 text-sm text-ink focus:border-accent focus:bg-white focus:outline-none transition-all resize-y"
+                    />
+                    {validationErrors.description && (
+                      <p className="mt-1 text-[11px] text-danger">{validationErrors.description}</p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-1">
+                    <Button
+                      type="button"
+                      onClick={() => void handleSave()}
+                      variant="primary"
+                      size="sm"
+                      loading={saving}
+                      leftIcon={<Save size={14} />}
+                      disabled={saving}
+                    >
+                      {saving ? 'Saving...' : 'Save Changes'}
+                    </Button>
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        setIsEditing(false);
+                        setSaveError(null);
+                        setValidationErrors({});
+                      }}
+                      variant="secondary"
+                      size="sm"
+                      disabled={saving}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="flex flex-wrap gap-2">
               {incident.category && (
                 <span className="flex items-center gap-1 text-xs font-semibold bg-secondary/10 text-secondary rounded-full px-3 py-1">
@@ -152,7 +411,6 @@ export function IncidentDetail() {
               )}
             </div>
 
-            {/* Original narrative */}
             <div className="pt-2">
               <label className="text-xs font-semibold text-muted uppercase tracking-wider block mb-1">
                 Original Account (Preserved Unedited)
@@ -162,7 +420,6 @@ export function IncidentDetail() {
               </p>
             </div>
 
-            {/* AI summary */}
             {incident.ai_summary && (
               <div>
                 <label className="text-xs font-semibold text-muted uppercase tracking-wider block mb-1">
@@ -174,7 +431,6 @@ export function IncidentDetail() {
               </div>
             )}
 
-            {/* People mentioned */}
             {incident.people_involved && incident.people_involved.length > 0 && (
               <div>
                 <label className="text-xs font-semibold text-muted uppercase tracking-wider block mb-1">
@@ -190,7 +446,6 @@ export function IncidentDetail() {
               </div>
             )}
 
-            {/* Risk keywords */}
             {incident.risk_keywords_detected && incident.risk_keywords_detected.length > 0 && (
               <div>
                 <label className="text-xs font-semibold text-muted uppercase tracking-wider block mb-1">
@@ -207,7 +462,6 @@ export function IncidentDetail() {
             )}
           </div>
 
-          {/* Evidence section */}
           <div className="rounded-2xl bg-warmwhite border border-blush p-6 shadow-sm space-y-4">
             <h2 className="font-heading text-base font-semibold text-primary">Cryptographic Evidence Files</h2>
 
@@ -228,7 +482,7 @@ export function IncidentDetail() {
                         </div>
                       </div>
                       <Button
-                        onClick={() => downloadFile(ev)}
+                        onClick={() => void downloadFile(ev)}
                         variant="secondary"
                         size="sm"
                         leftIcon={<Download size={14} />}
@@ -242,7 +496,6 @@ export function IncidentDetail() {
                       <span className="truncate">{ev.sha256_hash}</span>
                     </div>
 
-                    {/* Consent status */}
                     <div className="pt-2 border-t border-blush/40">
                       <label className="text-[11px] text-muted block mb-1">
                         {ev.file_type.startsWith('audio/') || ev.file_type.includes('audio')
@@ -253,7 +506,7 @@ export function IncidentDetail() {
                         {['obtained', 'not_obtained', 'unsure'].map((opt) => (
                           <button
                             key={opt}
-                            onClick={() => updateConsent(ev.id, opt)}
+                            onClick={() => void updateConsent(ev.id, opt)}
                             disabled={updatingConsent === ev.id}
                             className={`text-[11px] font-medium rounded-lg px-2.5 py-1 transition-all disabled:opacity-50 ${
                               ev.consent_status === opt
