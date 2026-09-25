@@ -1,189 +1,57 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { Mail, Lock, ArrowRight, ShieldCheck, CheckCircle2 } from 'lucide-react';
-import { useAuth } from '@/lib/auth';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { ArrowLeft, ArrowRight, Check, Eye, EyeOff, Lock, Mail, Phone, ShieldCheck } from 'lucide-react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { normalizePhoneNumber, useAuth } from '@/lib/auth';
+import { supabase } from '@/lib/supabase';
 import { SakshyaLogo } from '@/components/branding/SakshyaLogo';
 import { Button } from '@/components/ui/Button';
 
-export function AuthPage() {
-  const navigate = useNavigate();
-  const { signIn, signUp } = useAuth();
-  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [infoMessage, setInfoMessage] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+type Method = 'email' | 'phone';
+type Details = { fullName: string; preferredName: string; occupation: string; country: string; state: string; city: string; address: string; preferredLanguage: string };
+const occupations = ['Student', 'Employed', 'Self-employed', 'Homemaker', 'Unemployed', 'Other', 'Prefer not to say'];
+const languages = ['English', 'Hindi', 'Other'];
+const DEMO_OTP = '123456';
+const demoOtpEnabled = import.meta.env.VITE_DEMO_OTP_ENABLED === 'true';
 
-  const handleTabSwitch = (newMode: 'signin' | 'signup') => {
-    if (loading) return;
-    setMode(newMode);
-    setError(null);
-    setInfoMessage(null);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (loading) return;
-
-    setError(null);
-    setInfoMessage(null);
-    setLoading(true);
-
-    try {
-      if (mode === 'signin') {
-        const result = await signIn(email, password);
-        setLoading(false);
-        if (result.error) {
-          setError(result.error);
-        } else {
-          navigate('/dashboard');
-        }
-      } else {
-        const result = await signUp(email, password);
-        setLoading(false);
-        if (result.error) {
-          setError(result.error);
-        } else if (result.needsConfirmation) {
-          setInfoMessage('Account created! Please check your email to verify your account, then sign in.');
-          setMode('signin');
-        } else {
-          navigate('/dashboard');
-        }
-      }
-    } catch {
-      setLoading(false);
-      setError('An unexpected error occurred. Please try again.');
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-blush/60 flex items-center justify-center p-4">
-      <div className="w-full max-w-md animate-fade-in">
-        <div className="text-center mb-8">
-          <div className="flex justify-center mb-4">
-            <SakshyaLogo size="lg" showWordmark={true} tagline="Preserving your options." />
-          </div>
-          <p className="text-xs text-muted mt-2">
-            {mode === 'signin' ? 'Welcome back. Your safety matters.' : 'Create your private evidence vault.'}
-          </p>
-        </div>
-
-        <div className="rounded-2xl bg-warmwhite border border-blush shadow-lg p-6 md:p-8">
-          <div className="flex gap-2 mb-6 bg-blush/40 dark:bg-primary-dark/60 p-1 rounded-xl">
-            <button
-              type="button"
-              disabled={loading}
-              onClick={() => handleTabSwitch('signin')}
-              className={`flex-1 rounded-lg py-2 text-xs font-semibold transition-all ${
-                mode === 'signin' ? 'bg-primary text-white shadow-sm' : 'text-muted hover:text-primary dark:hover:text-accent'
-              }`}
-            >
-              Sign In
-            </button>
-            <button
-              type="button"
-              disabled={loading}
-              onClick={() => handleTabSwitch('signup')}
-              className={`flex-1 rounded-lg py-2 text-xs font-semibold transition-all ${
-                mode === 'signup' ? 'bg-primary text-white shadow-sm' : 'text-muted hover:text-primary dark:hover:text-accent'
-              }`}
-            >
-              Sign Up
-            </button>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-ink mb-1.5">Email Address</label>
-              <div className="relative">
-                <Mail size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted" />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  disabled={loading}
-                  className="w-full rounded-xl border border-blush bg-blush/20 pl-10 pr-4 py-3 text-sm text-ink focus:border-accent focus:bg-warmwhite dark:focus:bg-primary-dark/30 focus:outline-none transition-all disabled:opacity-60"
-                  placeholder="your@email.com"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-ink mb-1.5">Password</label>
-              <div className="relative">
-                <Lock size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted" />
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  disabled={loading}
-                  minLength={6}
-                  className="w-full rounded-xl border border-blush bg-blush/20 pl-10 pr-4 py-3 text-sm text-ink focus:border-accent focus:bg-warmwhite dark:focus:bg-primary-dark/30 focus:outline-none transition-all disabled:opacity-60"
-                  placeholder="At least 6 characters"
-                />
-              </div>
-            </div>
-
-            {infoMessage && (
-              <div className="rounded-xl bg-success/10 border border-success/20 p-3 text-xs text-success flex items-start gap-2">
-                <CheckCircle2 size={16} className="shrink-0 mt-0.5" />
-                <span>{infoMessage}</span>
-              </div>
-            )}
-
-            {error && (
-              <div className="rounded-xl bg-danger/10 border border-danger/20 p-3 text-xs text-danger flex items-start gap-2">
-                <span className="font-semibold shrink-0">•</span>
-                <div className="flex-1">
-                  <span>{error}</span>
-                  {error.toLowerCase().includes('rate limit') && (
-                    <p className="mt-1.5 text-[11px] text-ink/80 border-t border-danger/20 pt-1.5">
-                      💡 <strong>Tip:</strong> If your account was already created during a previous attempt, click 
-                      <button 
-                        type="button" 
-                        disabled={loading}
-                        onClick={() => handleTabSwitch('signin')} 
-                        className="underline font-semibold text-accent ml-1"
-                      >
-                        Sign In
-                      </button>, or wait a few minutes for the rate limit to reset.
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
-
-            <Button
-              type="submit"
-              variant="primary"
-              size="lg"
-              fullWidth
-              loading={loading}
-              disabled={loading}
-              rightIcon={<ArrowRight size={18} />}
-            >
-              {mode === 'signin' ? 'Sign In to Vault' : 'Create Secure Vault'}
-            </Button>
-          </form>
-
-          <div className="mt-6 pt-4 border-t border-blush/60 text-center">
-            <Link
-              to="/"
-              className="text-xs font-medium text-muted hover:text-accent transition-colors inline-flex items-center justify-center gap-1"
-            >
-              ← Back to Calculator Disguise
-            </Link>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-center gap-1.5 text-center text-[11px] text-muted mt-6 px-4">
-          <ShieldCheck size={14} className="text-secondary shrink-0" />
-          <span>Private & encrypted. Database row-level security enforced.</span>
-        </div>
-      </div>
-    </div>
-  );
+function mask(value: string, method: Method) {
+  if (method === 'email') { const [name, domain] = value.split('@'); return `${name.slice(0, 2)}${'*'.repeat(Math.max(2, name.length - 2))}@${domain}`; }
+  return `${value.slice(0, 3)}${'*'.repeat(Math.max(3, value.length - 7))}${value.slice(-4)}`;
 }
+function Notice({ text, danger = false }: { text: string; danger?: boolean }) { return <div role={danger ? 'alert' : 'status'} className={`rounded-xl border p-3 text-sm ${danger ? 'border-danger/20 bg-danger/10 text-danger' : 'border-success/20 bg-success/10 text-success'}`}>{text}</div>; }
+function PasswordField({ label, value, onChange, disabled }: { label: string; value: string; onChange: (value: string) => void; disabled?: boolean }) { const [visible, setVisible] = useState(false); return <label className="block text-sm font-medium text-ink">{label}<div className="relative mt-2"><Lock size={17} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted" /><input type={visible ? 'text' : 'password'} value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled} className="w-full rounded-xl border border-border bg-blush/20 py-3 pl-10 pr-11 text-sm text-ink outline-none focus:border-accent" /><button type="button" aria-label={visible ? 'Hide password' : 'Show password'} onClick={() => setVisible(!visible)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-accent">{visible ? <EyeOff size={17} /> : <Eye size={17} />}</button></div></label>; }
+function PasswordRequirements({ password }: { password: string }) { return <div className="rounded-xl bg-blush/40 p-3 text-xs text-muted"><p className="mb-1 font-semibold text-ink">Password requirements</p><p className={password.length >= 12 ? 'text-success' : ''}><Check size={13} className="mr-1 inline" />At least 12 characters</p><p className={/[A-Z]/.test(password) && /[a-z]/.test(password) && /\d/.test(password) ? 'text-success' : ''}><Check size={13} className="mr-1 inline" />Mix uppercase, lowercase, and numbers</p></div>; }
+function MethodToggle({ method, setMethod, disabled }: { method: Method; setMethod: (value: Method) => void; disabled: boolean }) { return <div className="grid grid-cols-2 gap-2 rounded-xl bg-blush/50 p-1"><button type="button" disabled={disabled} onClick={() => setMethod('email')} className={`rounded-lg px-3 py-2.5 text-sm font-medium ${method === 'email' ? 'bg-warmwhite text-primary shadow-sm' : 'text-muted'}`}><Mail size={16} className="mr-2 inline" />Email</button><button type="button" disabled={disabled} onClick={() => setMethod('phone')} className={`rounded-lg px-3 py-2.5 text-sm font-medium ${method === 'phone' ? 'bg-warmwhite text-primary shadow-sm' : 'text-muted'}`}><Phone size={16} className="mr-2 inline" />Mobile</button></div>; }
+function IdentifierFields({ method, identifier, setIdentifier, countryCode, setCountryCode, disabled }: { method: Method; identifier: string; setIdentifier: (value: string) => void; countryCode: string; setCountryCode: (value: string) => void; disabled: boolean }) { return <label className="block text-sm font-medium text-ink">{method === 'email' ? 'Email address' : 'Mobile number'}<div className="mt-2 flex gap-2">{method === 'phone' && <select value={countryCode} onChange={(event) => setCountryCode(event.target.value)} disabled={disabled} aria-label="Country code" className="w-24 rounded-xl border border-border bg-blush/20 px-2 text-sm text-ink"><option>+91</option><option>+1</option><option>+44</option><option>+61</option></select>}<div className="relative flex-1">{method === 'email' ? <Mail size={17} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted" /> : <Phone size={17} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted" />}<input type={method === 'email' ? 'email' : 'tel'} value={identifier} onChange={(event) => setIdentifier(event.target.value)} disabled={disabled} className="w-full rounded-xl border border-border bg-blush/20 py-3 pl-10 pr-3 text-sm text-ink outline-none focus:border-accent" placeholder={method === 'email' ? 'you@example.com' : '9876543210'} /></div></div></label>; }
+function AuthShell({ title, subtitle, children }: { title: string; subtitle: string; children: ReactNode }) { return <div className="flex min-h-screen items-center justify-center overflow-x-hidden bg-gradient-to-br from-blush via-warmwhite to-secondary/10 px-4 py-5 dark:from-blush dark:via-warmwhite dark:to-primary-dark/50"><div className="mx-auto w-full max-w-[460px] animate-fade-in"><main className="rounded-2xl border border-border bg-warmwhite/95 p-5 shadow-xl backdrop-blur sm:p-6"><header className="mb-5 text-center"><SakshyaLogo size="md" /><h1 className="mt-3 text-2xl">{title}</h1><p className="mt-1.5 text-sm text-muted">{subtitle}</p></header>{children}</main><div className="mt-4 flex items-center justify-center gap-2 text-center text-xs text-muted"><ShieldCheck size={15} className="text-success" />Private by design. Your password is never stored in your profile.</div><Link to="/" className="mt-3 flex items-center justify-center gap-1 text-sm text-muted hover:text-accent"><ArrowLeft size={15} />Back to calculator</Link></div></div>; }
+
+export function AuthPage() {
+  const navigate = useNavigate(); const [params] = useSearchParams(); const { user, session, signIn, sendOtp, verifyOtp, updatePassword, sendPasswordReset } = useAuth();
+  const [mode, setMode] = useState<'signin' | 'signup' | 'forgot' | 'reset'>(params.get('mode') === 'reset' ? 'reset' : 'signin'); const [method, setMethod] = useState<Method>('email'); const [identifier, setIdentifier] = useState(''); const [countryCode, setCountryCode] = useState('+91'); const [password, setPassword] = useState(''); const [confirmPassword, setConfirmPassword] = useState(''); const [otp, setOtp] = useState(['', '', '', '', '', '']); const [step, setStep] = useState(1); const [loading, setLoading] = useState(false); const [error, setError] = useState(''); const [message, setMessage] = useState(''); const [resendIn, setResendIn] = useState(0); const [details, setDetails] = useState<Details>({ fullName: '', preferredName: '', occupation: '', country: 'India', state: '', city: '', address: '', preferredLanguage: '' }); const otpRefs = useRef<Array<HTMLInputElement | null>>([]);
+  const clearNotice = () => { setError(''); setMessage(''); }; const fullIdentifier = method === 'phone' ? normalizePhoneNumber(countryCode, identifier) : identifier.trim().toLowerCase(); const validIdentifier = method === 'email' ? /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier) : /^\+\d{7,15}$/.test(fullIdentifier);
+  useEffect(() => { if (!resendIn) return; const timer = window.setInterval(() => setResendIn((value) => Math.max(0, value - 1)), 1000); return () => window.clearInterval(timer); }, [resendIn]);
+  useEffect(() => { if (step !== 6 || demoOtpEnabled) return; const timer = window.setTimeout(() => navigate('/dashboard'), 1400); return () => window.clearTimeout(timer); }, [navigate, step]);
+  const changeMode = (value: 'signin' | 'signup') => { clearNotice(); setMode(value); setStep(1); setResendIn(0); setPassword(''); setConfirmPassword(''); };
+  const requestOtp = async () => { if (loading || resendIn > 0) return; clearNotice(); if (!validIdentifier) { setError(method === 'email' ? 'Enter a valid email address.' : 'Enter a valid mobile number.'); return; } if (demoOtpEnabled) { setStep(2); setOtp(['', '', '', '', '', '']); setResendIn(30); setMessage(`Demo verification started for ${mask(fullIdentifier, method)}.`); return; } setLoading(true); const result = await sendOtp(fullIdentifier, method === 'phone' ? 'sms' : 'email'); setLoading(false); if (result.error) setError(result.error); else { setStep(2); setOtp(['', '', '', '', '', '']); setResendIn(60); setMessage(`Verification code sent to ${mask(fullIdentifier, method)}.`); } };
+  const handleOtp = (index: number, value: string) => { const digits = value.replace(/\D/g, ''); if (digits.length > 1) { const pasted = digits.slice(0, 6).split(''); setOtp((current) => current.map((digit, position) => pasted[position] ?? digit)); otpRefs.current[Math.min(5, pasted.length)]?.focus(); return; } setOtp((current) => current.map((digit, position) => position === index ? digits : digit)); if (digits && index < 5) otpRefs.current[index + 1]?.focus(); };
+  const confirmOtp = async () => { clearNotice(); if (otp.join('').length !== 6) { setError('Enter the six-digit verification code.'); return; } if (demoOtpEnabled) { if (otp.join('') !== DEMO_OTP) { setError('Incorrect demo code. Enter 123456.'); return; } setStep(3); setMessage('Demo code accepted. This did not verify ownership of the contact method.'); return; } setLoading(true); const result = await verifyOtp(fullIdentifier, otp.join(''), method === 'phone' ? 'sms' : 'email'); setLoading(false); if (result.error) setError(result.error); else { setStep(3); setMessage('Your account is verified. Create a password to continue.'); } };
+  const submitPassword = async () => { clearNotice(); if (password.length < 12) { setError('Use at least 12 characters.'); return; } if (password !== confirmPassword) { setError('Passwords do not match.'); return; } if (demoOtpEnabled) { setStep(4); setMessage('Demo password accepted locally. No account or password was saved.'); return; } setLoading(true); const result = await updatePassword(password); setLoading(false); if (result.error) setError(result.error); else setStep(4); };
+  const saveProfile = async () => { if (!user) { setError('Your session expired. Please verify again.'); return false; } setLoading(true); clearNotice(); const { error: profileError } = await supabase.from('profiles').upsert({ id: user.id, full_name: details.fullName.trim(), preferred_name: details.preferredName.trim() || null, occupation: details.occupation || null, country: details.country || null, state: details.state.trim() || null, city: details.city.trim() || null, address: details.address.trim() || null, preferred_language: details.preferredLanguage || null }, { onConflict: 'id' }); setLoading(false); if (profileError) { setError(profileError.message); return false; } setStep(5); return true; };
+  const submitSignIn = async (event: React.FormEvent) => { event.preventDefault(); clearNotice(); if (!validIdentifier) { setError(method === 'email' ? 'Enter a valid email address.' : 'Enter a valid mobile number.'); return; } setLoading(true); const result = await signIn(fullIdentifier, password); setLoading(false); if (result.error) setError(result.error); else navigate('/dashboard'); };
+  const submitReset = async (event: React.FormEvent) => { event.preventDefault(); clearNotice(); if (password.length < 12 || password !== confirmPassword) { setError(password.length < 12 ? 'Use at least 12 characters.' : 'Passwords do not match.'); return; } setLoading(true); const result = await updatePassword(password); setLoading(false); if (result.error) setError(result.error); else { setMessage('Your password has been updated.'); setMode('signin'); setPassword(''); setConfirmPassword(''); } };
+  const title = mode === 'signin' ? 'Welcome back to Sakshya' : mode === 'forgot' ? 'Reset your password' : mode === 'reset' ? 'Choose a new password' : ['Create your Sakshya account', 'Verify your account', 'Create your password', 'Tell us a little about yourself', 'Review your details', 'Registration complete'][step - 1];
+  if (mode === 'reset') return <AuthShell title={title} subtitle="Choose a new password to secure your Sakshya account."><form onSubmit={submitReset} className="space-y-5"><PasswordField label="New password" value={password} onChange={setPassword} disabled={loading} /><PasswordField label="Confirm password" value={confirmPassword} onChange={setConfirmPassword} disabled={loading} /><PasswordRequirements password={password} />{error && <Notice text={error} danger />}{message && <Notice text={message} />}<Button type="submit" fullWidth size="lg" loading={loading}>Update password</Button></form></AuthShell>;
+  return <AuthShell title={title} subtitle={mode === 'signin' ? 'Secure access to your private evidence vault.' : mode === 'forgot' ? 'We will send a secure reset link to your email.' : ['Choose how you want to verify your account.', `Enter the verification code sent to your ${method === 'email' ? 'email address' : 'mobile number'}.`, 'Choose a password to securely access your Sakshya account.', 'These details help personalize your Sakshya experience.', 'Review your verified details before finishing.', 'Your Sakshya account is ready.'][step - 1]}>
+    {mode === 'signin' && <form onSubmit={submitSignIn} className="space-y-5"><MethodToggle method={method} setMethod={setMethod} disabled={loading} /><IdentifierFields method={method} identifier={identifier} setIdentifier={setIdentifier} countryCode={countryCode} setCountryCode={setCountryCode} disabled={loading} /><PasswordField label="Password" value={password} onChange={setPassword} disabled={loading} />{error && <Notice text={error} danger />}{message && <Notice text={message} />}<Button type="submit" fullWidth size="lg" loading={loading} rightIcon={<ArrowRight size={18} />}>Sign in</Button><button type="button" onClick={() => { clearNotice(); setMode('forgot'); }} className="w-full text-center text-sm font-medium text-accent hover:underline">Forgot password?</button></form>}
+    {mode === 'forgot' && <form onSubmit={async (event) => { event.preventDefault(); clearNotice(); if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier)) { setError('Enter a valid email address.'); return; } setLoading(true); const result = await sendPasswordReset(identifier.trim()); setLoading(false); if (result.error) setError(result.error); else setMessage('Check your email for a secure password reset link.'); }} className="space-y-5"><IdentifierFields method="email" identifier={identifier} setIdentifier={setIdentifier} countryCode={countryCode} setCountryCode={setCountryCode} disabled={loading} />{error && <Notice text={error} danger />}{message && <Notice text={message} />}<Button type="submit" fullWidth size="lg" loading={loading}>Send reset link</Button><button type="button" onClick={() => changeMode('signin')} className="w-full text-center text-sm text-muted hover:text-accent">Back to sign in</button></form>}
+    {mode === 'signup' && step === 1 && <div className="space-y-5"><MethodToggle method={method} setMethod={setMethod} disabled={loading} /><IdentifierFields method={method} identifier={identifier} setIdentifier={setIdentifier} countryCode={countryCode} setCountryCode={setCountryCode} disabled={loading} /><Button type="button" fullWidth size="lg" loading={loading} onClick={requestOtp} rightIcon={<ArrowRight size={18} />}>Continue</Button></div>}
+    {mode === 'signup' && step === 2 && <div className="space-y-5"><p className="text-sm text-muted">{message}</p>{demoOtpEnabled && <p className="rounded-lg border border-accent/20 bg-accent/5 px-3 py-2 text-xs text-muted">Demo OTP: <strong className="text-ink">{DEMO_OTP}</strong></p>}<div className="flex justify-between gap-2" onPaste={(event) => { event.preventDefault(); handleOtp(0, event.clipboardData.getData('text')); }}>{otp.map((digit, index) => <input key={index} ref={(element) => { otpRefs.current[index] = element; }} value={digit} onChange={(event) => handleOtp(index, event.target.value)} inputMode="numeric" maxLength={6} aria-label={`Digit ${index + 1}`} className="h-12 w-10 rounded-xl border border-border bg-blush/20 text-center text-xl font-semibold text-ink outline-none focus:border-accent sm:w-12" />)}</div>{error && <Notice text={error} danger />}<Button type="button" fullWidth size="lg" loading={loading} onClick={confirmOtp}>Verify account</Button><div className="flex justify-between text-sm"><button type="button" disabled={loading || resendIn > 0} onClick={requestOtp} className="font-medium text-accent disabled:text-muted">{resendIn ? `Resend in ${resendIn}s` : 'Resend OTP'}</button><button type="button" disabled={loading} onClick={() => { setStep(1); setResendIn(0); }} className="text-muted hover:text-accent">Change details</button></div></div>}
+    {mode === 'signup' && step === 3 && <div className="space-y-5">{demoOtpEnabled && <Notice text="Demo mode: this password is checked locally and will not create an authenticated account." />}<PasswordField label="Password" value={password} onChange={setPassword} disabled={loading} /><PasswordField label="Confirm password" value={confirmPassword} onChange={setConfirmPassword} disabled={loading} /><PasswordRequirements password={password} />{error && <Notice text={error} danger />}{message && <Notice text={message} />}<Button type="button" fullWidth size="lg" loading={loading} onClick={submitPassword}>Continue</Button></div>}
+    {mode === 'signup' && step === 4 && <ProfileStep details={details} setDetails={setDetails} error={error} onContinue={() => details.fullName.trim() ? setStep(5) : setError('Enter your full name.')} />}
+    {mode === 'signup' && step === 5 && <ReviewStep details={details} destination={mask(fullIdentifier, method)} session={session} demo={demoOtpEnabled} error={error} loading={loading} onEdit={() => setStep(4)} onComplete={async () => { if (demoOtpEnabled) setStep(6); else if (await saveProfile()) setStep(6); }} />}
+    {mode === 'signup' && step === 6 && <div className="space-y-4 text-center"><div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-success/15 text-success"><Check size={28} /></div><p className="text-sm text-muted">{demoOtpEnabled ? 'Demo flow complete. No Supabase session, account, password, or profile was created.' : 'Your profile has been saved securely. Taking you to your dashboard.'}</p>{demoOtpEnabled && <Button type="button" fullWidth onClick={() => changeMode('signin')}>Return to sign in</Button>}</div>}
+    <div className="mt-7 border-t border-border/60 pt-5 text-center text-sm text-muted">{mode === 'signup' ? <>Already have an account? <button onClick={() => changeMode('signin')} className="font-semibold text-accent hover:underline">Sign in</button></> : mode !== 'forgot' ? <>New to Sakshya? <button onClick={() => changeMode('signup')} className="font-semibold text-accent hover:underline">Create an account</button></> : null}</div>
+  </AuthShell>;
+}
+
+function ProfileStep({ details, setDetails, error, onContinue }: { details: Details; setDetails: (value: Details) => void; error: string; onContinue: () => void }) { const update = (key: keyof Details, value: string) => setDetails({ ...details, [key]: value }); return <div className="space-y-4"><label className="block text-sm font-medium">Full name<input value={details.fullName} onChange={(event) => update('fullName', event.target.value)} className="mt-2 w-full rounded-xl border border-border bg-blush/20 px-3 py-3 text-sm" required /></label><label className="block text-sm font-medium">Preferred name <span className="font-normal text-muted">(optional)</span><input value={details.preferredName} onChange={(event) => update('preferredName', event.target.value)} className="mt-2 w-full rounded-xl border border-border bg-blush/20 px-3 py-3 text-sm" /></label><div className="grid gap-4 sm:grid-cols-2"><label className="text-sm font-medium">Occupation<select value={details.occupation} onChange={(event) => update('occupation', event.target.value)} className="mt-2 w-full rounded-xl border border-border bg-blush/20 px-3 py-3 text-sm"><option value="">Prefer not to say</option>{occupations.map((value) => <option key={value}>{value}</option>)}</select></label><label className="text-sm font-medium">Preferred language<select value={details.preferredLanguage} onChange={(event) => update('preferredLanguage', event.target.value)} className="mt-2 w-full rounded-xl border border-border bg-blush/20 px-3 py-3 text-sm"><option value="">Choose later</option>{languages.map((value) => <option key={value}>{value}</option>)}</select></label></div><div className="grid gap-4 sm:grid-cols-2">{(['country', 'state', 'city', 'address'] as const).map((key) => <label key={key} className="text-sm font-medium capitalize">{key === 'address' ? 'Full address' : key} {key !== 'country' && <span className="font-normal text-muted">(optional)</span>}<input value={details[key]} onChange={(event) => update(key, event.target.value)} className="mt-2 w-full rounded-xl border border-border bg-blush/20 px-3 py-3 text-sm" /></label>)}</div>{error && <Notice text={error} danger />}<Button type="button" fullWidth size="lg" onClick={onContinue}>Review details</Button></div>; }
+function ReviewStep({ details, destination, session, demo, error, loading, onEdit, onComplete }: { details: Details; destination: string; session: unknown; demo: boolean; error: string; loading: boolean; onEdit: () => void; onComplete: () => void }) { const rows = [['Verified', destination], ['Full name', details.fullName], ['Preferred name', details.preferredName || 'Not provided'], ['Occupation', details.occupation || 'Not provided'], ['Location', [details.city, details.state, details.country].filter(Boolean).join(', ')], ['Language', details.preferredLanguage || 'Not provided']]; return <div className="space-y-5"><div className="divide-y divide-border rounded-xl border border-border">{rows.map(([label, value]) => <div key={label} className="flex justify-between gap-4 px-4 py-3 text-sm"><span className="text-muted">{label}</span><span className="text-right font-medium text-ink">{value}</span></div>)}</div>{demo && <Notice text="Demo mode: details will not be saved without a real Supabase session." />}{error && <Notice text={error} danger />}<button type="button" onClick={onEdit} className="w-full text-sm font-medium text-accent hover:underline">Edit details</button><Button type="button" fullWidth size="lg" loading={loading} disabled={!session && !demo} onClick={onComplete}>{demo ? 'Complete demo registration' : 'Complete registration'}</Button></div>; }

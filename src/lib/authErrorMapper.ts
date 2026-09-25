@@ -29,6 +29,19 @@ export function mapAuthError(error: AuthError | Error | { message?: string; stat
   const message = typeof error.message === 'string' ? error.message : '';
   const lowerMsg = message.toLowerCase();
 
+  if (lowerMsg.includes('phone') && (lowerMsg.includes('disabled') || lowerMsg.includes('not enabled'))) {
+    return 'Mobile verification is not enabled. Please use email verification or contact support.';
+  }
+  if (lowerMsg.includes('sms') && (lowerMsg.includes('provider') || lowerMsg.includes('send') || lowerMsg.includes('delivery'))) {
+    return 'Unable to send the verification code. Please try again later or use email verification.';
+  }
+  if (lowerMsg.includes('invalid phone') || lowerMsg.includes('phone number')) {
+    return 'Enter a valid mobile number with its country code.';
+  }
+  if (lowerMsg.includes('expired') || lowerMsg.includes('invalid token') || lowerMsg.includes('otp')) {
+    return 'That verification code is invalid or expired. Request a new code and try again.';
+  }
+
   // Rate Limiting (429)
   if (
     status === 429 ||
@@ -42,7 +55,7 @@ export function mapAuthError(error: AuthError | Error | { message?: string; stat
 
   // Invalid Credentials (400)
   if (
-    status === 400 ||
+    status === 400 &&
     code === 'invalid_credentials' ||
     lowerMsg.includes('invalid login credentials') ||
     lowerMsg.includes('invalid credentials')
