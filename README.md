@@ -8,6 +8,12 @@ Sakshya is a safe, private, survivor-controlled digital evidence and documentati
 
 ## Current Product Structure
 
+### Voice Recording & Transcription
+- Add Incident uses the browser's native `MediaRecorder` API. Recordings can be played back, replaced, or converted to editable text before the incident is saved.
+- Configure the Supabase Edge Function name with `VITE_SUPABASE_TRANSCRIPTION_FUNCTION` in the environment used by Vite. The frontend sends the audio as an authenticated multipart request through `supabase.functions.invoke` and does not contain a speech-service secret.
+- The Edge Function must validate the authenticated user, keep audio private, forward it to the configured speech-to-text provider, and return JSON shaped as `{ "transcript": "..." }` (or `{ "text": "..." }`). It should return a clear non-2xx error for failures.
+- Until that function is configured, `Convert to Text` shows a configuration error and keeps the local recording available. Recordings are uploaded to the existing private `evidence` bucket only when the user confirms the incident.
+
 ### Frontend Architecture
 - **Framework**: React 18 with TypeScript & Vite.
 - **Routing**: `react-router-dom` (HashRouter) supporting decoy calculator entry flow.
